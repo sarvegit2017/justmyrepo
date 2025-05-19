@@ -1,111 +1,69 @@
 function setupQuizSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var quizSheetName = "quiz";
-  var datastoreSheetName = "datastore";
-  
-  // Ensure 'quiz' sheet exists
-  var quizSheet = ss.getSheetByName(quizSheetName);
-  if (!quizSheet) {
-    quizSheet = ss.insertSheet(quizSheetName);
-    Logger.log('Sheet "' + quizSheetName + '" has been created.');
-  } else {
-    Logger.log('Sheet "' + quizSheetName + '" already exists.');
-  }
-  
-  // Setup dropdown in B2
-  var datastoreSheet = ss.getSheetByName(datastoreSheetName);
-  if (!datastoreSheet) {
-    Logger.log('Sheet "' + datastoreSheetName + '" not found.');
-    return;
-  }
-  
-  var data = datastoreSheet.getDataRange().getValues();
-  var categories = [];
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][1]) {
-      categories.push(data[i][1]);
-    }
-  }
-  var uniqueCategories = Array.from(new Set(categories));
-  
-  var dropdownCell = quizSheet.getRange("B2");
-  var rule = SpreadsheetApp.newDataValidation()
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const datastoreSheet = ss.getSheetByName('datastore');
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // === 1. Set Category Dropdown in A1 ===
+  const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
+  const uniqueCategories = [...new Set(data.flat().filter(Boolean))];
+
+  const dropdownRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(uniqueCategories, true)
     .setAllowInvalid(false)
     .build();
-  dropdownCell.setDataValidation(rule);
-  
-  // Clear any existing trigger to avoid duplication
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() == "onEditQuizSheet") {
-      ScriptApp.deleteTrigger(triggers[i]);
-    }
+
+  quizSheet.getRange('A1').setDataValidation(dropdownRule);
+
+  // === 2. Insert "Start Quiz" label and checkbox ===
+  quizSheet.getRange('A2').setValue('Start Quiz');
+  quizSheet.getRange('B2').insertCheckboxes();
+
+  // === 3. Add onEdit trigger (only if not already set) ===
+  const triggers = ScriptApp.getProjectTriggers();
+  const hasOnEdit = triggers.some(trigger => trigger.getHandlerFunction() === 'handleCheckboxEdit');
+
+  if (!hasOnEdit) {
+    ScriptApp.newTrigger('handleCheckboxEdit')
+      .forSpreadsheet(ss)
+      .onEdit()
+      .create();
   }
-  
-  // Set up trigger for onEdit
-  ScriptApp.newTrigger("onEditQuizSheet")
-    .forSpreadsheet(ss)
-    .onEdit()
-    .create();
-  
-  Logger.log('Setup complete. Dropdown, headers, and trigger are ready.');
 }
 
-function onEditQuizSheet(e) {
-  var ss = e.source;
-  var quizSheet = ss.getSheetByName("quiz");
-  var datastoreSheet = ss.getSheetByName("datastore");
-  
-  if (!quizSheet || !datastoreSheet) return;
-  
-  var editedRange = e.range;
-  if (quizSheet.getName() == e.range.getSheet().getName() && editedRange.getA1Notation() == "B2") {
-    var selectedCategory = e.value;
-    
-    // Clear display area first (from row 3, cols B to D)
-    quizSheet.getRange("B3:D").clearContent();
-    quizSheet.getRange("B4:D").clearContent();
-    
-    // Always set headers
-    quizSheet.getRange("B3").setValue("SL#");
-    quizSheet.getRange("C3").setValue("Category");
-    quizSheet.getRange("D3").setValue("Questions");
-    
-    if (!selectedCategory) return;
-    
-    var data = datastoreSheet.getDataRange().getValues();
-    var filteredData = [];
-    
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][1] == selectedCategory) {
-        filteredData.push([data[i][0], data[i][1], data[i][2]]);
+// === 4. Respond to checkbox and category edits ===
+function handleCheckboxEdit(e) {
+  if (!e) return;
+
+  const sheet = e.source.getSheetByName('quiz');
+  const range = e.range;
+  const cell = range.getA1Notation();
+
+  // === If category changed in A1 ===
+  if (sheet.getName() === 'quiz' && cell === 'A1') {
+    sheet.getRange('A4').setValue('');      // Clear question
+    sheet.getRange('B2').setValue(false);   // Uncheck checkbox
+    return;
+  }
+
+  // === If checkbox in B2 is checked ===
+  if (sheet.getName() === 'quiz' && cell === 'B2') {
+    const isChecked = range.getValue();
+    const category = sheet.getRange('A1').getValue();
+    const questionCell = sheet.getRange('A4');
+
+    if (isChecked && category) {
+      const datastore = e.source.getSheetByName('datastore');
+      const data = datastore.getDataRange().getValues();
+      const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
+
+      if (filtered.length > 0) {
+        const random = filtered[Math.floor(Math.random() * filtered.length)];
+        questionCell.setValue(random[2]); // Question in column C
+      } else {
+        questionCell.setValue("No questions available for this category.");
       }
-    }
-    
-    if (filteredData.length > 0) {
-      if (filteredData.length > 5) {
-        filteredData = getRandomSample(filteredData, 5);
-      }
-      quizSheet.getRange(4, 2, filteredData.length, 3).setValues(filteredData);
     } else {
-      quizSheet.getRange("B4").setValue("No data for selected category.");
+      questionCell.setValue('');
     }
   }
-}
-
-// Helper function to get random sample of size 'n' from array 'arr'
-function getRandomSample(arr, n) {
-  var result = [];
-  var taken = [];
-  
-  while (result.length < n) {
-    var index = Math.floor(Math.random() * arr.length);
-    if (taken.indexOf(index) === -1) {
-      result.push(arr[index]);
-      taken.push(index);
-    }
-  }
-  
-  return result;
 }
