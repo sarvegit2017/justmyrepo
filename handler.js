@@ -6,19 +6,28 @@ function onEdit(e) {
 
   var cell = range.getA1Notation();
 
-  if (cell === 'C6' && range.getValue() === true) {
-    showRandomQuestion();
+  // Handle Start Quiz checkbox
+  if (cell === 'C3' && range.getValue() === true) {
+    startQuiz();
   }
 
-  if (cell === 'C8' && range.getValue() === true) {
+  // Handle Show Answer checkbox
+  if (cell === 'C11' && range.getValue() === true) {
     showAnswer();
   }
 
-  if (cell === 'C14' && range.getValue() === true) {
+  // Handle Next Question checkbox
+  if (cell === 'C16' && range.getValue() === true) {
+    showRandomQuestion();
+  }
+
+  // Handle Right checkbox
+  if (cell === 'C19' && range.getValue() === true) {
     updateCountAndAskNext('right');
   }
 
-  if (cell === 'C16' && range.getValue() === true) {
+  // Handle Wrong checkbox
+  if (cell === 'C21' && range.getValue() === true) {
     updateCountAndAskNext('wrong');
   }
 }
