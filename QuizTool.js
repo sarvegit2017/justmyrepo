@@ -37,7 +37,6 @@ function setupQuizSheet() {
   quizSheet.getRange('B1').setValue('QUIZ TOOL').setFontWeight('bold').setHorizontalAlignment('center');
   quizSheet.getRange('B1:C1').setBackground('#f0f0f0');
   
-  // Create sections with borders and backgrounds
   // Setup section
   quizSheet.getRange('B2:C3').setBorder(true, true, true, true, true, true);
   quizSheet.getRange('B2').setValue('Select Category').setFontWeight('bold');
@@ -63,16 +62,16 @@ function setupQuizSheet() {
   quizSheet.getRange('B10').setValue('Answer:').setFontWeight('bold');
   
   // Results section (moved up to replace the navigation section)
-  quizSheet.getRange('B13:C13').merge();
-  quizSheet.getRange('B13').setValue('RESULTS').setFontWeight('bold').setHorizontalAlignment('center');
-  quizSheet.getRange('B13:C13').setBackground('#e6f2ff');
+  quizSheet.getRange('B12:C12').merge();
+  quizSheet.getRange('B12').setValue('RESULTS').setFontWeight('bold').setHorizontalAlignment('center');
+  quizSheet.getRange('B12:C12').setBackground('#e6f2ff');
   
-  quizSheet.getRange('B14:C17').setBorder(true, true, true, true, true, true);
-  quizSheet.getRange('B14:C17').setBackground('#f5f9ff');
-  quizSheet.getRange('B14').setValue('Right').setFontWeight('bold');
-  quizSheet.getRange('B15').setValue('Right Count:').setFontWeight('bold');
-  quizSheet.getRange('B16').setValue('Wrong').setFontWeight('bold');
-  quizSheet.getRange('B17').setValue('Wrong Count:').setFontWeight('bold');
+  quizSheet.getRange('B13:C16').setBorder(true, true, true, true, true, true);
+  quizSheet.getRange('B13:C16').setBackground('#f5f9ff');
+  quizSheet.getRange('B13').setValue('Right').setFontWeight('bold');
+  quizSheet.getRange('B14').setValue('Right Count:').setFontWeight('bold');
+  quizSheet.getRange('B15').setValue('Wrong').setFontWeight('bold');
+  quizSheet.getRange('B16').setValue('Wrong Count:').setFontWeight('bold');
 
   // Quiz statistics in the right column
   quizSheet.getRange('E2:F2').merge();
@@ -89,8 +88,8 @@ function setupQuizSheet() {
   // Add checkboxes and set initial values
   quizSheet.getRange('C3').insertCheckboxes();
   quizSheet.getRange('C9').insertCheckboxes();
-  quizSheet.getRange('C14').insertCheckboxes();
-  quizSheet.getRange('C16').insertCheckboxes();
+  quizSheet.getRange('C13').insertCheckboxes();
+  quizSheet.getRange('C15').insertCheckboxes();
 
   // Dropdown: category selection
   var dataSheet = ss.getSheetByName('datastore');
@@ -105,13 +104,13 @@ function setupQuizSheet() {
   // Initialize values
   quizSheet.getRange('C2').clearContent();
   quizSheet.getRange('C3').setValue(false);
-  quizSheet.getRange('C6').clearContent();
+  quizSheet.getRange('C6').clearContent(); // Question display - NO checkbox here
   quizSheet.getRange('C9').setValue(false);
   quizSheet.getRange('C10').clearContent();
-  quizSheet.getRange('C14').setValue(false);
-  quizSheet.getRange('C15').setValue(0);
-  quizSheet.getRange('C16').setValue(false);
-  quizSheet.getRange('C17').setValue(0);
+  quizSheet.getRange('C13').setValue(false);
+  quizSheet.getRange('C14').setValue(0);
+  quizSheet.getRange('C15').setValue(false);
+  quizSheet.getRange('C16').setValue(0);
   quizSheet.getRange('F3').setValue(0);
   quizSheet.getRange('F4').setValue('0/5');
   
@@ -149,8 +148,8 @@ function startQuiz() {
   quizSheet.getRange('F3').setValue(0);  // Questions Asked
   quizSheet.getRange('F4').setValue('0/5'); // Progress
   quizSheet.getRange('F5').setValue('0%'); // Score
-  quizSheet.getRange('C17').setValue(0); // Right Count
-  quizSheet.getRange('C19').setValue(0); // Wrong Count
+  quizSheet.getRange('C14').setValue(0); // Right Count
+  quizSheet.getRange('C16').setValue(0); // Wrong Count
   
   // Show the first question
   showRandomQuestion();
@@ -173,7 +172,7 @@ function showRandomQuestion() {
     quizSheet.getRange('C6').setValue("Quiz complete! You answered 5 questions.");
     
     // Calculate and show final score
-    var rightCount = quizSheet.getRange('C15').getValue();
+    var rightCount = quizSheet.getRange('C14').getValue();
     var percentage = Math.round((rightCount / 5) * 100);
     quizSheet.getRange('F5').setValue(percentage + '%');
     quizSheet.getRange('C10').setValue('Your final score: ' + percentage + '% (' + rightCount + ' out of 5 correct)');
@@ -213,8 +212,8 @@ function showRandomQuestion() {
 
   // Reset checkboxes
   quizSheet.getRange('C9').setValue(false); // Show Answer
-  quizSheet.getRange('C14').setValue(false); // Right
-  quizSheet.getRange('C16').setValue(false); // Wrong
+  quizSheet.getRange('C13').setValue(false); // Right
+  quizSheet.getRange('C15').setValue(false); // Wrong
 }
 
 function showAnswer() {
@@ -231,19 +230,19 @@ function updateCountAndAskNext(type) {
   var quizSheet = ss.getSheetByName('Quiz');
   
   // Update the appropriate counter based on right/wrong
-  var cell = type === 'right' ? 'C15' : 'C17';
+  var cell = type === 'right' ? 'C14' : 'C16';
   var count = quizSheet.getRange(cell).getValue();
   quizSheet.getRange(cell).setValue((!isNaN(count) ? count : 0) + 1);
 
   // Update current score percentage
-  var rightCount = quizSheet.getRange('C15').getValue();
+  var rightCount = quizSheet.getRange('C14').getValue();
   var questionsAsked = quizSheet.getRange('F3').getValue();
   var percentage = Math.round((rightCount / questionsAsked) * 100);
   quizSheet.getRange('F5').setValue(percentage + '%');
 
   // Reset the checkboxes
-  quizSheet.getRange('C14').setValue(false); // Right checkbox
-  quizSheet.getRange('C16').setValue(false); // Wrong checkbox
+  quizSheet.getRange('C13').setValue(false); // Right checkbox
+  quizSheet.getRange('C15').setValue(false); // Wrong checkbox
 
   // Check if we've completed 5 questions
   if (questionsAsked >= 5) {
@@ -281,12 +280,12 @@ function onEdit(e) {
   }
 
   // Handle Right checkbox
-  if (cell === 'C14' && range.getValue() === true) {
+  if (cell === 'C13' && range.getValue() === true) {
     updateCountAndAskNext('right');
   }
 
   // Handle Wrong checkbox
-  if (cell === 'C16' && range.getValue() === true) {
+  if (cell === 'C15' && range.getValue() === true) {
     updateCountAndAskNext('wrong');
   }
 }
