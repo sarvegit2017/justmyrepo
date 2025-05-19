@@ -104,7 +104,7 @@ function setupQuizSheet() {
   // Initialize values
   quizSheet.getRange('C2').clearContent();
   quizSheet.getRange('C3').setValue(false);
-  quizSheet.getRange('C6').clearContent();
+  quizSheet.getRange('C6').clearContent(); // Question display - NO checkbox here
   quizSheet.getRange('C9').setValue(false);
   quizSheet.getRange('C10').clearContent();
   quizSheet.getRange('C13').setValue(false);
