@@ -56,8 +56,8 @@ function setupQuizSheet() {
   quizSheet.getRange('B8').setValue('ANSWER').setFontWeight('bold').setHorizontalAlignment('center');
   quizSheet.getRange('B8:C8').setBackground('#e6f2ff');
   
-  quizSheet.getRange('B9:C10').setBorder(true, true, true, true, true, true);
-  quizSheet.getRange('B9:C10').setBackground('#f5f9ff');
+  quizSheet.getRange('B9:C11').setBorder(true, true, true, true, true, true);
+  quizSheet.getRange('B9:C11').setBackground('#f5f9ff');
   quizSheet.getRange('B9').setValue('Show Answer').setFontWeight('bold');
   quizSheet.getRange('B10').setValue('Answer:').setFontWeight('bold');
   

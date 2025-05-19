@@ -1,3 +1,4 @@
+//mycode
 function setupQuizSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var quizSheetName = "quiz";
