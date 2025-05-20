@@ -12,7 +12,28 @@ function setupTestResultsSheet() {
   // Create the sheet if it doesn't exist
   if (!testSheet) {
     testSheet = ss.insertSheet('testResults');
-  } else {
+    
+    // Set up header row only when creating a new sheet
+    testSheet.getRange('A1:C1').setValues([['Test Name', 'Result', 'Details']]);
+    testSheet.getRange('A1:C1').setFontWeight('bold');
+    
+    // Format the sheet
+    testSheet.setFrozenRows(1);
+    testSheet.autoResizeColumns(1, 3);
+    testSheet.setColumnWidth(3, 300); // Make the details column wider
+  }
+  
+  return testSheet;
+}
+
+/**
+ * Clear all test results in the test results sheet
+ */
+function clearTestResults() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let testSheet = ss.getSheetByName('testResults');
+  
+  if (testSheet) {
     // Clear existing content except header
     const lastRow = testSheet.getLastRow();
     if (lastRow > 1) {
@@ -20,17 +41,6 @@ function setupTestResultsSheet() {
       testSheet.getRange(2, 1, lastRow - 1, 3).clearFormat();
     }
   }
-  
-  // Set up header row
-  testSheet.getRange('A1:C1').setValues([['Test Name', 'Result', 'Details']]);
-  testSheet.getRange('A1:C1').setFontWeight('bold');
-  
-  // Format the sheet
-  testSheet.setFrozenRows(1);
-  testSheet.autoResizeColumns(1, 3);
-  testSheet.setColumnWidth(3, 300); // Make the details column wider
-  
-  return testSheet;
 }
 
 /**
@@ -67,7 +77,6 @@ function recordTestResult(testName, passed, details) {
 function testCategoryClearsQuestionCell() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const quizSheet = ss.getSheetByName('quiz');
-  let details = [];
   
   // Setup: Put some text in A4 to verify it gets cleared
   quizSheet.getRange('A4').setValue('Test question that should be cleared');
@@ -88,42 +97,85 @@ function testCategoryClearsQuestionCell() {
   const a4Value = quizSheet.getRange('A4').getValue();
   const a4Cleared = a4Value === '';
   
-  if (a4Cleared) {
-    details.push('✓ A4 cell was properly cleared');
-  } else {
-    details.push(`✗ A4 cell was not cleared. Current value: "${a4Value}"`);
-  }
+  // Record result in the test sheet
+  recordTestResult(
+    'When category is changed, cell A4 should be cleared', 
+    a4Cleared, 
+    a4Cleared ? 
+      '✓ A4 cell was properly cleared' : 
+      `✗ A4 cell was not cleared. Current value: "${a4Value}"`
+  );
+  
+  return a4Cleared;
+}
+
+/**
+ * Test that verifies checkbox in B2 is unchecked when category in A1 is changed
+ * Returns true if the test passes, false otherwise
+ */
+function testCategoryClearsCheckbox() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  
+  // Setup: Check the checkbox to verify it gets cleared
+  quizSheet.getRange('B2').setValue(true); // Set checkbox to checked
+  
+  // Create a mock edit event for changing the category in A1
+  const mockEvent = {
+    source: ss,
+    range: quizSheet.getRange('A1'),
+    value: 'Some Category',
+    oldValue: 'Previous Category'
+  };
+  
+  // Call the handler function with our mock event
+  handleCheckboxEdit(mockEvent);
   
   // Verify the checkbox was unchecked
   const checkboxValue = quizSheet.getRange('B2').getValue();
   const checkboxUnchecked = checkboxValue === false;
   
-  if (checkboxUnchecked) {
-    details.push('✓ B2 checkbox was properly unchecked');
-  } else {
-    details.push('✗ B2 checkbox was not unchecked');
-  }
-  
   // Record result in the test sheet
-  const testPassed = a4Cleared && checkboxUnchecked;
   recordTestResult(
-    'Category Change Clears Question', 
-    testPassed, 
-    details.join('\n')
+    'When category is changed, checkbox in B2 should be cleared', 
+    checkboxUnchecked, 
+    checkboxUnchecked ? 
+      '✓ B2 checkbox was properly unchecked' : 
+      '✗ B2 checkbox was not unchecked'
   );
   
-  return testPassed;
+  return checkboxUnchecked;
 }
 
 /**
  * Run all unit tests and record results in the test results sheet
  */
 function runAllTests() {
-  // This will clear previous results and set up the sheet
-  const testSheet = setupTestResultsSheet();
+  // Clear previous results before running new tests
+  clearTestResults();
   
   // Test 1: Category change clears question cell
   testCategoryClearsQuestionCell();
   
+  // Test 2: Category change unchecks checkbox
+  testCategoryClearsCheckbox();
+  
   // Add more tests here as needed
+}
+
+/**
+ * Run a specific test by name
+ * Can be used to run individual tests without clearing all results
+ */
+function runTest(testName) {
+  switch(testName) {
+    case 'clearQuestionCell':
+      testCategoryClearsQuestionCell();
+      break;
+    case 'clearCheckbox':
+      testCategoryClearsCheckbox();
+      break;
+    default:
+      throw new Error(`Test "${testName}" not found`);
+  }
 }
