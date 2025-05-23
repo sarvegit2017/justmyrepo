@@ -18,7 +18,13 @@ function setupQuizSheet() {
   quizSheet.getRange('A2').setValue('Start Quiz');
   quizSheet.getRange('B2').insertCheckboxes();
 
-  // === 3. Add onEdit trigger (only if not already set) ===
+  // === 3. Add Right and Wrong checkboxes ===
+  quizSheet.getRange('A5').setValue('Right');
+  quizSheet.getRange('B5').insertCheckboxes();
+  quizSheet.getRange('A6').setValue('Wrong');
+  quizSheet.getRange('B6').insertCheckboxes();
+
+  // === 4. Add onEdit trigger (only if not already set) ===
   const triggers = ScriptApp.getProjectTriggers();
   const hasOnEdit = triggers.some(trigger => trigger.getHandlerFunction() === 'handleCheckboxEdit');
 
@@ -30,7 +36,7 @@ function setupQuizSheet() {
   }
 }
 
-// === 4. Respond to checkbox and category edits ===
+// === 5. Respond to checkbox and category edits ===
 function handleCheckboxEdit(e) {
   if (!e) return;
 
@@ -40,12 +46,14 @@ function handleCheckboxEdit(e) {
 
   // === If category changed in A1 ===
   if (sheet.getName() === 'quiz' && cell === 'A1') {
-    sheet.getRange('A4').setValue('');      // Clear question
-    sheet.getRange('B2').setValue(false);   // Uncheck checkbox
+    sheet.getRange('A4').setValue('');     // Clear question
+    sheet.getRange('B2').setValue(false);  // Uncheck Start Quiz checkbox
+    sheet.getRange('B5').setValue(false);  // Uncheck Right checkbox
+    sheet.getRange('B6').setValue(false);  // Uncheck Wrong checkbox
     return;
   }
 
-  // === If checkbox in B2 is checked ===
+  // === If Start Quiz checkbox in B2 is checked ===
   if (sheet.getName() === 'quiz' && cell === 'B2') {
     const isChecked = range.getValue();
     const category = sheet.getRange('A1').getValue();
@@ -59,11 +67,62 @@ function handleCheckboxEdit(e) {
       if (filtered.length > 0) {
         const random = filtered[Math.floor(Math.random() * filtered.length)];
         questionCell.setValue(random[2]); // Question in column C
+        // Clear Right/Wrong checkboxes when new quiz starts
+        sheet.getRange('B5').setValue(false);
+        sheet.getRange('B6').setValue(false);
       } else {
         questionCell.setValue("No questions available for this category.");
       }
     } else {
       questionCell.setValue('');
+      // Clear Right/Wrong checkboxes when quiz stops
+      sheet.getRange('B5').setValue(false);
+      sheet.getRange('B6').setValue(false);
+    }
+  }
+
+  // === If Right checkbox in B5 is checked ===
+  if (sheet.getName() === 'quiz' && cell === 'B5') {
+    const isChecked = range.getValue();
+    if (isChecked) {
+      // Uncheck Wrong checkbox
+      sheet.getRange('B6').setValue(false);
+      // Show next question
+      showNextQuestion(sheet, e.source);
+    }
+  }
+
+  // === If Wrong checkbox in B6 is checked ===
+  if (sheet.getName() === 'quiz' && cell === 'B6') {
+    const isChecked = range.getValue();
+    if (isChecked) {
+      // Uncheck Right checkbox
+      sheet.getRange('B5').setValue(false);
+      // Show next question
+      showNextQuestion(sheet, e.source);
+    }
+  }
+}
+
+// === Helper function to show next random question ===
+function showNextQuestion(sheet, spreadsheet) {
+  const category = sheet.getRange('A1').getValue();
+  const questionCell = sheet.getRange('A4');
+
+  if (category) {
+    const datastore = spreadsheet.getSheetByName('datastore');
+    const data = datastore.getDataRange().getValues();
+    const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
+
+    if (filtered.length > 0) {
+      const random = filtered[Math.floor(Math.random() * filtered.length)];
+      questionCell.setValue(random[2]); // Question in column C
+      
+      // Clear both Right/Wrong checkboxes for the next question
+      sheet.getRange('B5').setValue(false);
+      sheet.getRange('B6').setValue(false);
+    } else {
+      questionCell.setValue("No questions available for this category.");
     }
   }
 }
