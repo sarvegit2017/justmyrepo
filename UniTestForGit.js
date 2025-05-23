@@ -83,50 +83,104 @@ function isRangeProtected(sheet, rangeA1) {
 }
 
 /**
- * Test that verifies cell A4 is cleared when category in A1 is changed
+ * Test that verifies questions are not repeated during a quiz session
  * Returns true if the test passes, false otherwise
  */
-function testCategoryClearsQuestionCell() {
+function testQuestionsNotRepeated() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const quizSheet = ss.getSheetByName('quiz');
-
-  // Setup: Put some text in A4 to verify it gets cleared
-  quizSheet.getRange('A4').setValue('Test question that should be cleared');
-  quizSheet.getRange('B2').setValue(true); // Set checkbox to checked
-
-  // Create a mock edit event for changing the category in A1
-  const mockEvent = {
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore with multiple questions
+  const data = datastoreSheet.getDataRange().getValues();
+  const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
+  const testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Get all questions for the test category
+  const categoryQuestions = data.filter((row, index) => index !== 0 && row[1] === testCategory);
+  
+  // Reset the quiz state
+  quizSheet.getRange('A1').setValue(testCategory);
+  quizSheet.getRange('B2').setValue(false);
+  quizSheet.getRange('A4').setValue('');
+  quizSheet.getRange('C1').setValue(0);
+  quizSheet.getRange('D1').setValue(''); // Reset used questions
+  quizSheet.getRange('B5').setValue(false);
+  quizSheet.getRange('B6').setValue(false);
+  
+  // Start the quiz
+  const startQuizEvent = {
     source: ss,
-    range: quizSheet.getRange('A1'),
-    value: 'Some Category',
-    oldValue: 'Previous Category'
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
   };
-
-  // Call the handler function with our mock event
-  handleCheckboxEdit(mockEvent);
-
-  // Check if A4 is cleared
-  const a4Value = quizSheet.getRange('A4').getValue();
-  const a4Cleared = a4Value === '';
-
+  handleCheckboxEdit(startQuizEvent);
+  
+  const usedQuestions = [];
+  let hasRepeats = false;
+  let debugInfo = [];
+  
+  // Collect the first question
+  const firstQuestion = quizSheet.getRange('A4').getValue();
+  if (firstQuestion && firstQuestion !== '') {
+    usedQuestions.push(firstQuestion);
+    debugInfo.push(`Q1: "${firstQuestion}"`);
+  }
+  
+  // Simulate answering questions and check for repetition
+  const maxQuestions = Math.min(5, categoryQuestions.length);
+  for (let i = 1; i < maxQuestions; i++) {
+    // Answer the current question (use Right checkbox)
+    const rightClickEvent = {
+      source: ss,
+      range: quizSheet.getRange('B5'),
+      value: true,
+      oldValue: false
+    };
+    handleCheckboxEdit(rightClickEvent);
+    
+    const currentQuestion = quizSheet.getRange('A4').getValue();
+    
+    // Check if this is a completion message
+    if (currentQuestion && currentQuestion.toString().includes('Quiz Complete')) {
+      debugInfo.push(`Quiz completed at question ${i + 1}`);
+      break;
+    }
+    
+    if (currentQuestion && currentQuestion !== '') {
+      debugInfo.push(`Q${i + 1}: "${currentQuestion}"`);
+      
+      // Check if this question was already used
+      if (usedQuestions.includes(currentQuestion)) {
+        hasRepeats = true;
+        debugInfo.push(`REPEAT DETECTED: "${currentQuestion}" was already used`);
+      } else {
+        usedQuestions.push(currentQuestion);
+      }
+    }
+  }
+  
+  const testPassed = !hasRepeats && usedQuestions.length > 1;
+  
   // Record result in the test sheet
   recordTestResult(
-    'When category is changed, cell A4 should be cleared',
-    a4Cleared,
-    a4Cleared ?
-      '✓ A4 cell was properly cleared' :
-      `✗ A4 cell was not cleared. Current value: "${a4Value}"`
+    'Questions should not be repeated during a quiz session', 
+    testPassed, 
+    testPassed ? 
+      `✓ No repeated questions found. Used ${usedQuestions.length} unique questions` : 
+      `✗ ${hasRepeats ? 'Repeated questions detected' : 'Not enough questions to test'}. Debug: ${debugInfo.join(' | ')}`
   );
-
-  return a4Cleared;
+  
+  return testPassed;
 }
 /**
  * Run all unit tests and record results in the test results sheet
  */
-function runAllTests() {
+function runAllTestsGit() {
   // Clear previous results before running new tests
   clearTestResults();
   // Test 1: Category change clears question cell
-  testCategoryClearsQuestionCell();
+  testQuestionsNotRepeated();
 }
 
