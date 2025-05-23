@@ -573,7 +573,7 @@ function testUsedQuestionsTracking() {
   );
 
   return testPassed;
-}
+}//ok
 
 // Test that verifies used questions list is reset when category changes
 function testUsedQuestionsResetOnCategoryChange() {
