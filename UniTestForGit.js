@@ -63,28 +63,50 @@ function createMockEditEvent(spreadsheet, range, newValue, oldValue) {
   };
 }
 
-
-
-// Test that verifies used questions list is properly tracked in cell D1
-function testUsedQuestionsTracking() {
+//Test that verifies quiz ends early if no more unique questions are available Returns true if the test passes, false otherwise
+function testQuizEndsEarlyWhenNoMoreUniqueQuestions() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const quizSheet = ss.getSheetByName('quiz');
   const datastoreSheet = ss.getSheetByName('datastore');
 
   const data = datastoreSheet.getDataRange().getValues();
-  const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
-  const testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  const categoryQuestionCounts = {};
+
+  data.slice(1).forEach(row => {
+    if (row[1]) {
+      categoryQuestionCounts[row[1]] = (categoryQuestionCounts[row[1]] || 0) + 1;
+    }
+  });
+
+  let testCategory = null;
+  let questionCount = 0;
+  for (const [category, count] of Object.entries(categoryQuestionCounts)) {
+    if (count < 5 && count > 1) {
+      testCategory = category;
+      questionCount = count;
+      break;
+    }
+  }
+
+  if (!testCategory) {
+
+    const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
+    testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+
+
+    const allQuestionsForCategory = data.filter((row, index) => index !== 0 && row[1] === testCategory);
+
+    const preUsedQuestions = allQuestionsForCategory.slice(0, -2).map(row => row[2]);
+    quizSheet.getRange('D1').setValue(JSON.stringify(preUsedQuestions));
+    questionCount = 2;
+  }
 
   quizSheet.getRange('A1').setValue(testCategory);
   quizSheet.getRange('B2').setValue(false);
   quizSheet.getRange('A4').setValue('');
   quizSheet.getRange('C1').setValue(0);
-  quizSheet.getRange('D1').setValue('');
   quizSheet.getRange('B5').setValue(false);
   quizSheet.getRange('B6').setValue(false);
-
-  const initialUsedQuestions = getUsedQuestions(quizSheet);
-  const initiallyEmpty = Array.isArray(initialUsedQuestions) && initialUsedQuestions.length === 0;
 
   const startQuizEvent = {
     source: ss,
@@ -94,35 +116,49 @@ function testUsedQuestionsTracking() {
   };
   handleCheckboxEdit(startQuizEvent);
 
-  const firstQuestion = quizSheet.getRange('A4').getValue();
-  const usedQuestionsAfterFirst = getUsedQuestions(quizSheet);
-  const firstQuestionTracked = usedQuestionsAfterFirst.includes(firstQuestion);
+  let questionsAnswered = 1; // First question is loaded when quiz starts
+  let debugInfo = [`Started with ${questionCount} available questions`];
 
-  const rightClickEvent = {
-    source: ss,
-    range: quizSheet.getRange('B5'),
-    value: true,
-    oldValue: false
-  };
-  handleCheckboxEdit(rightClickEvent);
+  for (let i = 1; i < 5; i++) {
+    const rightClickEvent = {
+      source: ss,
+      range: quizSheet.getRange('B5'),
+      value: true,
+      oldValue: false
+    };
+    handleCheckboxEdit(rightClickEvent);
 
-  const secondQuestion = quizSheet.getRange('A4').getValue();
-  const usedQuestionsAfterSecond = getUsedQuestions(quizSheet);
-  const secondQuestionTracked = !secondQuestion.includes('Quiz Complete') && usedQuestionsAfterSecond.includes(secondQuestion);
-  const bothQuestionsTracked = usedQuestionsAfterSecond.length >= 2 || secondQuestion.includes('Quiz Complete');
+    const currentQuestion = quizSheet.getRange('A4').getValue();
 
-  const testPassed = initiallyEmpty && firstQuestionTracked && (secondQuestionTracked || secondQuestion.includes('Quiz Complete'));
+    if (currentQuestion && currentQuestion.toString().includes('Quiz Complete')) {
+      debugInfo.push(`Quiz ended at question ${questionsAnswered} with completion message`);
+      break;
+    } else if (currentQuestion && currentQuestion !== '') {
+      questionsAnswered++;
+      debugInfo.push(`Question ${questionsAnswered} shown`);
+    }
+  }
+
+  const finalQuestionText = quizSheet.getRange('A4').getValue();
+  const showsEarlyCompletionMessage = finalQuestionText && (
+    finalQuestionText.toString().includes('Quiz Complete') ||
+    finalQuestionText.toString().includes('No more unique questions')
+  );
+  const endedEarly = questionsAnswered < 5;
+  const startQuizUnchecked = quizSheet.getRange('B2').getValue() === false;
+
+  const testPassed = endedEarly && showsEarlyCompletionMessage && startQuizUnchecked;
 
   recordTestResult(
-    'Used questions should be properly tracked in cell D1',
+    'Quiz should end early when no more unique questions are available',
     testPassed,
     testPassed ?
-      `✓ Used questions properly tracked. Initial: ${initialUsedQuestions.length}, After first: ${usedQuestionsAfterFirst.length}, After second: ${usedQuestionsAfterSecond.length}` :
-      `✗ Tracking failed. Initial empty: ${initiallyEmpty}, First tracked: ${firstQuestionTracked}, Second tracked: ${secondQuestionTracked}, Questions: ["${firstQuestion}", "${secondQuestion}"]`
+      `✓ Quiz properly ended early after ${questionsAnswered} questions` :
+      `✗ Early end failed. Questions answered: ${questionsAnswered}, Shows completion: ${showsEarlyCompletionMessage}, Start Quiz unchecked: ${startQuizUnchecked}. Debug: ${debugInfo.join(' | ')}`
   );
 
   return testPassed;
-}//ok
+}
 
 /**
  * Run all unit tests and record results in the test results sheet
@@ -130,6 +166,5 @@ function testUsedQuestionsTracking() {
 function runAllTestsGit() {
   clearTestResults();
 
-  testUsedQuestionsTracking();
+  testQuizEndsEarlyWhenNoMoreUniqueQuestions();
 }
-
