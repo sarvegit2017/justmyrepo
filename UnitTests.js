@@ -71,6 +71,20 @@ function recordTestResult(testName, passed, details) {
 }
 
 /**
+ * Helper function to check if a range is protected
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet to check
+ * @param {string} rangeA1 - The A1 notation of the range to check
+ * @returns {boolean} True if the range is protected, false otherwise
+ */
+function isRangeProtected(sheet, rangeA1) {
+  const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
+  return protections.some(protection => {
+    const protectedRange = protection.getRange();
+    return protectedRange.getA1Notation() === rangeA1;
+  });
+}
+
+/**
  * Test that verifies cell A4 is cleared when category in A1 is changed
  * Returns true if the test passes, false otherwise
  */
@@ -148,6 +162,167 @@ function testCategoryClearsCheckbox() {
 }
 
 /**
+ * Test that verifies Right and Wrong checkboxes are disabled when Start Quiz is unchecked
+ * Returns true if the test passes, false otherwise
+ */
+function testRightWrongCheckboxesDisabledWhenQuizNotStarted() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore
+  const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
+  const validCategories = [...new Set(data.flat().filter(Boolean))];
+  const validCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Setup: Ensure Start Quiz is unchecked and select a valid category
+  quizSheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+  quizSheet.getRange('A1').setValue(validCategory); // Set a valid category
+  
+  // Create a mock edit event for unchecking Start Quiz
+  const mockEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: false,
+    oldValue: true
+  };
+  
+  // Call the handler function with our mock event
+  handleCheckboxEdit(mockEvent);
+  
+  // Check if Right and Wrong checkboxes are protected (disabled)
+  const rightProtected = isRangeProtected(quizSheet, 'B5');
+  const wrongProtected = isRangeProtected(quizSheet, 'B6');
+  
+  // Also check if the checkboxes are unchecked
+  const rightUnchecked = quizSheet.getRange('B5').getValue() === false;
+  const wrongUnchecked = quizSheet.getRange('B6').getValue() === false;
+  
+  const testPassed = rightProtected && wrongProtected && rightUnchecked && wrongUnchecked;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Right and Wrong checkboxes should be disabled when Start Quiz is unchecked', 
+    testPassed, 
+    testPassed ? 
+      '✓ Right and Wrong checkboxes are properly disabled and unchecked' : 
+      `✗ Right protected: ${rightProtected}, Wrong protected: ${wrongProtected}, Right unchecked: ${rightUnchecked}, Wrong unchecked: ${wrongUnchecked}`
+  );
+  
+  return testPassed;
+}
+
+/**
+ * Test that verifies Right and Wrong checkboxes are enabled when Start Quiz is checked
+ * Returns true if the test passes, false otherwise
+ */
+function testRightWrongCheckboxesEnabledWhenQuizStarted() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore
+  const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
+  const validCategories = [...new Set(data.flat().filter(Boolean))];
+  const testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Setup: Set category and check Start Quiz
+  quizSheet.getRange('A1').setValue(testCategory);
+  quizSheet.getRange('B2').setValue(true); // Check Start Quiz
+  
+  // Create a mock edit event for checking Start Quiz
+  const mockEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  
+  // Call the handler function with our mock event
+  handleCheckboxEdit(mockEvent);
+  
+  // Check if Right and Wrong checkboxes are NOT protected (enabled)
+  const rightNotProtected = !isRangeProtected(quizSheet, 'B5');
+  const wrongNotProtected = !isRangeProtected(quizSheet, 'B6');
+  
+  // Also check if a question was loaded
+  const questionLoaded = quizSheet.getRange('A4').getValue() !== '';
+  
+  const testPassed = rightNotProtected && wrongNotProtected && questionLoaded;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Right and Wrong checkboxes should be enabled when Start Quiz is checked', 
+    testPassed, 
+    testPassed ? 
+      '✓ Right and Wrong checkboxes are properly enabled and question loaded' : 
+      `✗ Right enabled: ${rightNotProtected}, Wrong enabled: ${wrongNotProtected}, Question loaded: ${questionLoaded}`
+  );
+  
+  return testPassed;
+}
+
+/**
+ * Test that verifies Right and Wrong checkboxes auto-uncheck when clicked while Start Quiz is unchecked
+ * Returns true if the test passes, false otherwise
+ */
+function testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore
+  const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
+  const validCategories = [...new Set(data.flat().filter(Boolean))];
+  const validCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Setup: Ensure Start Quiz is unchecked
+  quizSheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+  quizSheet.getRange('A1').setValue(validCategory); // Set a valid category
+  
+  // Try to check the Right checkbox when Start Quiz is unchecked
+  const mockEventRight = {
+    source: ss,
+    range: quizSheet.getRange('B5'),
+    value: true,
+    oldValue: false
+  };
+  
+  // Call the handler function
+  handleCheckboxEdit(mockEventRight);
+  
+  // Check if Right checkbox was auto-unchecked
+  const rightAutoUnchecked = quizSheet.getRange('B5').getValue() === false;
+  
+  // Try to check the Wrong checkbox when Start Quiz is unchecked
+  const mockEventWrong = {
+    source: ss,
+    range: quizSheet.getRange('B6'),
+    value: true,
+    oldValue: false
+  };
+  
+  // Call the handler function
+  handleCheckboxEdit(mockEventWrong);
+  
+  // Check if Wrong checkbox was auto-unchecked
+  const wrongAutoUnchecked = quizSheet.getRange('B6').getValue() === false;
+  
+  const testPassed = rightAutoUnchecked && wrongAutoUnchecked;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Right and Wrong checkboxes should auto-uncheck when clicked while Start Quiz is unchecked', 
+    testPassed, 
+    testPassed ? 
+      '✓ Right and Wrong checkboxes properly auto-unchecked' : 
+      `✗ Right auto-unchecked: ${rightAutoUnchecked}, Wrong auto-unchecked: ${wrongAutoUnchecked}`
+  );
+  
+  return testPassed;
+}
+
+/**
  * Run all unit tests and record results in the test results sheet
  */
 function runAllTests() {
@@ -159,6 +334,15 @@ function runAllTests() {
   
   // Test 2: Category change unchecks checkbox
   testCategoryClearsCheckbox();
+  
+  // Test 3: Right and Wrong checkboxes disabled when quiz not started
+  testRightWrongCheckboxesDisabledWhenQuizNotStarted();
+  
+  // Test 4: Right and Wrong checkboxes enabled when quiz started
+  testRightWrongCheckboxesEnabledWhenQuizStarted();
+  
+  // Test 5: Right and Wrong checkboxes auto-uncheck when clicked while quiz not started
+  testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted();
   
   // Add more tests here as needed
 }
@@ -174,6 +358,15 @@ function runTest(testName) {
       break;
     case 'clearCheckbox':
       testCategoryClearsCheckbox();
+      break;
+    case 'disableRightWrongWhenQuizNotStarted':
+      testRightWrongCheckboxesDisabledWhenQuizNotStarted();
+      break;
+    case 'enableRightWrongWhenQuizStarted':
+      testRightWrongCheckboxesEnabledWhenQuizStarted();
+      break;
+    case 'autoUncheckRightWrongWhenQuizNotStarted':
+      testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted();
       break;
     default:
       throw new Error(`Test "${testName}" not found`);

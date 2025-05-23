@@ -24,7 +24,11 @@ function setupQuizSheet() {
   quizSheet.getRange('A6').setValue('Wrong');
   quizSheet.getRange('B6').insertCheckboxes();
 
-  // === 4. Add onEdit trigger (only if not already set) ===
+  // === 4. Initially disable Right and Wrong checkboxes ===
+  quizSheet.getRange('B5').protect().setDescription('Right checkbox - disabled until quiz starts');
+  quizSheet.getRange('B6').protect().setDescription('Wrong checkbox - disabled until quiz starts');
+
+  // === 5. Add onEdit trigger (only if not already set) ===
   const triggers = ScriptApp.getProjectTriggers();
   const hasOnEdit = triggers.some(trigger => trigger.getHandlerFunction() === 'handleCheckboxEdit');
 
@@ -36,7 +40,31 @@ function setupQuizSheet() {
   }
 }
 
-// === 5. Respond to checkbox and category edits ===
+// === Helper function to enable/disable Right and Wrong checkboxes ===
+function toggleRightWrongCheckboxes(sheet, enable) {
+  const rightCheckbox = sheet.getRange('B5');
+  const wrongCheckbox = sheet.getRange('B6');
+  
+  if (enable) {
+    // Remove protection to enable checkboxes
+    const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
+    protections.forEach(protection => {
+      const range = protection.getRange();
+      if (range.getA1Notation() === 'B5' || range.getA1Notation() === 'B6') {
+        protection.remove();
+      }
+    });
+  } else {
+    // Add protection to disable checkboxes
+    rightCheckbox.protect().setDescription('Right checkbox - disabled until quiz starts');
+    wrongCheckbox.protect().setDescription('Wrong checkbox - disabled until quiz starts');
+    // Clear checkbox values when disabling
+    rightCheckbox.setValue(false);
+    wrongCheckbox.setValue(false);
+  }
+}
+
+// === Respond to checkbox and category edits ===
 function handleCheckboxEdit(e) {
   if (!e) return;
 
@@ -48,8 +76,7 @@ function handleCheckboxEdit(e) {
   if (sheet.getName() === 'quiz' && cell === 'A1') {
     sheet.getRange('A4').setValue('');     // Clear question
     sheet.getRange('B2').setValue(false);  // Uncheck Start Quiz checkbox
-    sheet.getRange('B5').setValue(false);  // Uncheck Right checkbox
-    sheet.getRange('B6').setValue(false);  // Uncheck Wrong checkbox
+    toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong checkboxes
     return;
   }
 
@@ -67,39 +94,51 @@ function handleCheckboxEdit(e) {
       if (filtered.length > 0) {
         const random = filtered[Math.floor(Math.random() * filtered.length)];
         questionCell.setValue(random[2]); // Question in column C
-        // Clear Right/Wrong checkboxes when new quiz starts
-        sheet.getRange('B5').setValue(false);
-        sheet.getRange('B6').setValue(false);
+        // Enable Right/Wrong checkboxes when quiz starts
+        toggleRightWrongCheckboxes(sheet, true);
       } else {
         questionCell.setValue("No questions available for this category.");
+        // Disable checkboxes if no questions available
+        toggleRightWrongCheckboxes(sheet, false);
       }
     } else {
       questionCell.setValue('');
-      // Clear Right/Wrong checkboxes when quiz stops
-      sheet.getRange('B5').setValue(false);
-      sheet.getRange('B6').setValue(false);
+      // Disable Right/Wrong checkboxes when quiz stops
+      toggleRightWrongCheckboxes(sheet, false);
     }
   }
 
   // === If Right checkbox in B5 is checked ===
   if (sheet.getName() === 'quiz' && cell === 'B5') {
     const isChecked = range.getValue();
-    if (isChecked) {
+    const startQuizChecked = sheet.getRange('B2').getValue();
+    
+    // Only proceed if Start Quiz is checked
+    if (isChecked && startQuizChecked) {
       // Uncheck Wrong checkbox
       sheet.getRange('B6').setValue(false);
       // Show next question
       showNextQuestion(sheet, e.source);
+    } else if (isChecked && !startQuizChecked) {
+      // If Start Quiz is not checked, uncheck this checkbox
+      sheet.getRange('B5').setValue(false);
     }
   }
 
   // === If Wrong checkbox in B6 is checked ===
   if (sheet.getName() === 'quiz' && cell === 'B6') {
     const isChecked = range.getValue();
-    if (isChecked) {
+    const startQuizChecked = sheet.getRange('B2').getValue();
+    
+    // Only proceed if Start Quiz is checked
+    if (isChecked && startQuizChecked) {
       // Uncheck Right checkbox
       sheet.getRange('B5').setValue(false);
       // Show next question
       showNextQuestion(sheet, e.source);
+    } else if (isChecked && !startQuizChecked) {
+      // If Start Quiz is not checked, uncheck this checkbox
+      sheet.getRange('B6').setValue(false);
     }
   }
 }
