@@ -323,6 +323,135 @@ function testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted() {
 }
 
 /**
+ * Test that verifies quiz completes after 5 questions and shows completion message
+ * Returns true if the test passes, false otherwise
+ */
+function testQuizCompletesAfter5Questions() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore
+  const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
+  const validCategories = [...new Set(data.flat().filter(Boolean))];
+  const testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Setup: Start a quiz
+  quizSheet.getRange('A1').setValue(testCategory);
+  quizSheet.getRange('B2').setValue(true);
+  
+  // Start the quiz
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  // Simulate answering 5 questions by clicking Right checkbox 5 times
+  for (let i = 0; i < 5; i++) {
+    const rightClickEvent = {
+      source: ss,
+      range: quizSheet.getRange('B5'),
+      value: true,
+      oldValue: false
+    };
+    handleCheckboxEdit(rightClickEvent);
+  }
+  
+  // Check if quiz completed properly
+  const questionText = quizSheet.getRange('A4').getValue();
+  const isCompletionMessage = questionText && questionText.toString().includes('Quiz Complete');
+  const startQuizUnchecked = quizSheet.getRange('B2').getValue() === false;
+  const rightCheckboxDisabled = isRangeProtected(quizSheet, 'B5');
+  const wrongCheckboxDisabled = isRangeProtected(quizSheet, 'B6');
+  const questionCounterReset = quizSheet.getRange('C1').getValue() === 0;
+  
+  const testPassed = isCompletionMessage && startQuizUnchecked && rightCheckboxDisabled && wrongCheckboxDisabled && questionCounterReset;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Quiz should complete after 5 questions with completion message', 
+    testPassed, 
+    testPassed ? 
+      '✓ Quiz properly completed after 5 questions with all expected behaviors' : 
+      `✗ Completion message: ${isCompletionMessage}, Start Quiz unchecked: ${startQuizUnchecked}, Right disabled: ${rightCheckboxDisabled}, Wrong disabled: ${wrongCheckboxDisabled}, Counter reset: ${questionCounterReset}, Question text: "${questionText}"`
+  );
+  
+  return testPassed;
+}
+
+/**
+ * Test that verifies question counter resets when category is changed
+ * Returns true if the test passes, false otherwise
+ */
+function testQuestionCounterResetsOnCategoryChange() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid categories from datastore
+  const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
+  const validCategories = [...new Set(data.flat().filter(Boolean))];
+  const category1 = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  const category2 = validCategories.length > 1 ? validCategories[1] : validCategories[0];
+  
+  // Setup: Start a quiz and answer some questions
+  quizSheet.getRange('A1').setValue(category1);
+  quizSheet.getRange('B2').setValue(true);
+  
+  // Start the quiz
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  // Answer 2 questions to set counter
+  for (let i = 0; i < 2; i++) {
+    const rightClickEvent = {
+      source: ss,
+      range: quizSheet.getRange('B5'),
+      value: true,
+      oldValue: false
+    };
+    handleCheckboxEdit(rightClickEvent);
+  }
+  
+  // Verify counter is at 3 (1 initial + 2 additional)
+  const counterBefore = quizSheet.getRange('C1').getValue();
+  
+  // Change category
+  const categoryChangeEvent = {
+    source: ss,
+    range: quizSheet.getRange('A1'),
+    value: category2,
+    oldValue: category1
+  };
+  handleCheckboxEdit(categoryChangeEvent);
+  
+  // Check if counter was reset
+  const counterAfter = quizSheet.getRange('C1').getValue();
+  const counterReset = counterAfter === 0;
+  
+  const testPassed = counterBefore > 0 && counterReset;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Question counter should reset when category is changed', 
+    testPassed, 
+    testPassed ? 
+      '✓ Question counter properly reset when category changed' : 
+      `✗ Counter before: ${counterBefore}, Counter after: ${counterAfter}, Reset: ${counterReset}`
+  );
+  
+  return testPassed;
+}
+
+/**
  * Run all unit tests and record results in the test results sheet
  */
 function runAllTests() {
@@ -343,6 +472,12 @@ function runAllTests() {
   
   // Test 5: Right and Wrong checkboxes auto-uncheck when clicked while quiz not started
   testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted();
+  
+  // Test 6: Quiz completes after 5 questions
+  testQuizCompletesAfter5Questions();
+  
+  // Test 7: Question counter resets on category change
+  testQuestionCounterResetsOnCategoryChange();
   
   // Add more tests here as needed
 }
@@ -367,6 +502,12 @@ function runTest(testName) {
       break;
     case 'autoUncheckRightWrongWhenQuizNotStarted':
       testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted();
+      break;
+    case 'quizCompletesAfter5Questions':
+      testQuizCompletesAfter5Questions();
+      break;
+    case 'questionCounterResetsOnCategoryChange':
+      testQuestionCounterResetsOnCategoryChange();
       break;
     default:
       throw new Error(`Test "${testName}" not found`);

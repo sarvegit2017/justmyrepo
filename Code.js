@@ -64,6 +64,23 @@ function toggleRightWrongCheckboxes(sheet, enable) {
   }
 }
 
+// === Helper function to get or initialize question counter ===
+function getQuestionCounter(sheet) {
+  const counterCell = sheet.getRange('C1');
+  const counter = counterCell.getValue();
+  return (typeof counter === 'number' && counter >= 0) ? counter : 0;
+}
+
+// === Helper function to set question counter ===
+function setQuestionCounter(sheet, count) {
+  sheet.getRange('C1').setValue(count);
+}
+
+// === Helper function to reset question counter ===
+function resetQuestionCounter(sheet) {
+  setQuestionCounter(sheet, 0);
+}
+
 // === Respond to checkbox and category edits ===
 function handleCheckboxEdit(e) {
   if (!e) return;
@@ -76,6 +93,7 @@ function handleCheckboxEdit(e) {
   if (sheet.getName() === 'quiz' && cell === 'A1') {
     sheet.getRange('A4').setValue('');     // Clear question
     sheet.getRange('B2').setValue(false);  // Uncheck Start Quiz checkbox
+    resetQuestionCounter(sheet);           // Reset question counter
     toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong checkboxes
     return;
   }
@@ -94,15 +112,18 @@ function handleCheckboxEdit(e) {
       if (filtered.length > 0) {
         const random = filtered[Math.floor(Math.random() * filtered.length)];
         questionCell.setValue(random[2]); // Question in column C
+        setQuestionCounter(sheet, 1); // Start with question 1
         // Enable Right/Wrong checkboxes when quiz starts
         toggleRightWrongCheckboxes(sheet, true);
       } else {
         questionCell.setValue("No questions available for this category.");
+        resetQuestionCounter(sheet);
         // Disable checkboxes if no questions available
         toggleRightWrongCheckboxes(sheet, false);
       }
     } else {
       questionCell.setValue('');
+      resetQuestionCounter(sheet);
       // Disable Right/Wrong checkboxes when quiz stops
       toggleRightWrongCheckboxes(sheet, false);
     }
@@ -147,6 +168,17 @@ function handleCheckboxEdit(e) {
 function showNextQuestion(sheet, spreadsheet) {
   const category = sheet.getRange('A1').getValue();
   const questionCell = sheet.getRange('A4');
+  const currentCount = getQuestionCounter(sheet);
+
+  // Check if we've reached 5 questions
+  if (currentCount >= 5) {
+    questionCell.setValue("Quiz Complete! You have answered 5 questions.");
+    // Disable checkboxes and stop quiz
+    toggleRightWrongCheckboxes(sheet, false);
+    sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+    resetQuestionCounter(sheet);
+    return;
+  }
 
   if (category) {
     const datastore = spreadsheet.getSheetByName('datastore');
@@ -157,11 +189,15 @@ function showNextQuestion(sheet, spreadsheet) {
       const random = filtered[Math.floor(Math.random() * filtered.length)];
       questionCell.setValue(random[2]); // Question in column C
       
+      // Increment question counter
+      setQuestionCounter(sheet, currentCount + 1);
+      
       // Clear both Right/Wrong checkboxes for the next question
       sheet.getRange('B5').setValue(false);
       sheet.getRange('B6').setValue(false);
     } else {
       questionCell.setValue("No questions available for this category.");
+      resetQuestionCounter(sheet);
     }
   }
 }
