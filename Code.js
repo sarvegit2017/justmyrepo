@@ -81,6 +81,40 @@ function resetQuestionCounter(sheet) {
   setQuestionCounter(sheet, 0);
 }
 
+// === Helper function to get used questions list ===
+function getUsedQuestions(sheet) {
+  const usedQuestionsCell = sheet.getRange('D1');
+  const usedQuestionsStr = usedQuestionsCell.getValue();
+  if (!usedQuestionsStr || usedQuestionsStr === '') {
+    return [];
+  }
+  try {
+    return JSON.parse(usedQuestionsStr);
+  } catch (e) {
+    return [];
+  }
+}
+
+// === Helper function to set used questions list ===
+function setUsedQuestions(sheet, usedQuestions) {
+  const usedQuestionsCell = sheet.getRange('D1');
+  usedQuestionsCell.setValue(JSON.stringify(usedQuestions));
+}
+
+// === Helper function to reset used questions list ===
+function resetUsedQuestions(sheet) {
+  setUsedQuestions(sheet, []);
+}
+
+// === Helper function to add a question to used questions list ===
+function addUsedQuestion(sheet, questionText) {
+  const usedQuestions = getUsedQuestions(sheet);
+  if (!usedQuestions.includes(questionText)) {
+    usedQuestions.push(questionText);
+    setUsedQuestions(sheet, usedQuestions);
+  }
+}
+
 // === Respond to checkbox and category edits ===
 function handleCheckboxEdit(e) {
   if (!e) return;
@@ -94,6 +128,7 @@ function handleCheckboxEdit(e) {
     sheet.getRange('A4').setValue('');     // Clear question
     sheet.getRange('B2').setValue(false);  // Uncheck Start Quiz checkbox
     resetQuestionCounter(sheet);           // Reset question counter
+    resetUsedQuestions(sheet);             // Reset used questions list
     toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong checkboxes
     return;
   }
@@ -110,20 +145,37 @@ function handleCheckboxEdit(e) {
       const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
 
       if (filtered.length > 0) {
-        const random = filtered[Math.floor(Math.random() * filtered.length)];
-        questionCell.setValue(random[2]); // Question in column C
-        setQuestionCounter(sheet, 1); // Start with question 1
-        // Enable Right/Wrong checkboxes when quiz starts
-        toggleRightWrongCheckboxes(sheet, true);
+        // Reset used questions when starting a new quiz
+        resetUsedQuestions(sheet);
+        
+        const usedQuestions = getUsedQuestions(sheet);
+        const availableQuestions = filtered.filter(row => !usedQuestions.includes(row[2]));
+        
+        if (availableQuestions.length > 0) {
+          const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+          questionCell.setValue(random[2]); // Question in column C
+          addUsedQuestion(sheet, random[2]); // Track this question as used
+          setQuestionCounter(sheet, 1); // Start with question 1
+          // Enable Right/Wrong checkboxes when quiz starts
+          toggleRightWrongCheckboxes(sheet, true);
+        } else {
+          questionCell.setValue("No more questions available for this category.");
+          resetQuestionCounter(sheet);
+          resetUsedQuestions(sheet);
+          // Disable checkboxes if no questions available
+          toggleRightWrongCheckboxes(sheet, false);
+        }
       } else {
         questionCell.setValue("No questions available for this category.");
         resetQuestionCounter(sheet);
+        resetUsedQuestions(sheet);
         // Disable checkboxes if no questions available
         toggleRightWrongCheckboxes(sheet, false);
       }
     } else {
       questionCell.setValue('');
       resetQuestionCounter(sheet);
+      resetUsedQuestions(sheet);
       // Disable Right/Wrong checkboxes when quiz stops
       toggleRightWrongCheckboxes(sheet, false);
     }
@@ -177,6 +229,7 @@ function showNextQuestion(sheet, spreadsheet) {
     toggleRightWrongCheckboxes(sheet, false);
     sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
     resetQuestionCounter(sheet);
+    resetUsedQuestions(sheet); // Reset used questions when quiz completes
     return;
   }
 
@@ -186,18 +239,33 @@ function showNextQuestion(sheet, spreadsheet) {
     const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
 
     if (filtered.length > 0) {
-      const random = filtered[Math.floor(Math.random() * filtered.length)];
-      questionCell.setValue(random[2]); // Question in column C
+      const usedQuestions = getUsedQuestions(sheet);
+      const availableQuestions = filtered.filter(row => !usedQuestions.includes(row[2]));
       
-      // Increment question counter
-      setQuestionCounter(sheet, currentCount + 1);
-      
-      // Clear both Right/Wrong checkboxes for the next question
-      sheet.getRange('B5').setValue(false);
-      sheet.getRange('B6').setValue(false);
+      if (availableQuestions.length > 0) {
+        const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+        questionCell.setValue(random[2]); // Question in column C
+        addUsedQuestion(sheet, random[2]); // Track this question as used
+        
+        // Increment question counter
+        setQuestionCounter(sheet, currentCount + 1);
+        
+        // Clear both Right/Wrong checkboxes for the next question
+        sheet.getRange('B5').setValue(false);
+        sheet.getRange('B6').setValue(false);
+      } else {
+        // No more unique questions available, end quiz early
+        questionCell.setValue("Quiz Complete! No more unique questions available for this category.");
+        // Disable checkboxes and stop quiz
+        toggleRightWrongCheckboxes(sheet, false);
+        sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+        resetQuestionCounter(sheet);
+        resetUsedQuestions(sheet);
+      }
     } else {
       questionCell.setValue("No questions available for this category.");
       resetQuestionCounter(sheet);
+      resetUsedQuestions(sheet);
     }
   }
 }

@@ -474,6 +474,415 @@ function testQuestionCounterResetsOnCategoryChange() {
 }
 
 /**
+ * Test that verifies questions are not repeated during a quiz session
+ * Returns true if the test passes, false otherwise
+ */
+function testQuestionsNotRepeated() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore with multiple questions
+  const data = datastoreSheet.getDataRange().getValues();
+  const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
+  const testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Get all questions for the test category
+  const categoryQuestions = data.filter((row, index) => index !== 0 && row[1] === testCategory);
+  
+  // Reset the quiz state
+  quizSheet.getRange('A1').setValue(testCategory);
+  quizSheet.getRange('B2').setValue(false);
+  quizSheet.getRange('A4').setValue('');
+  quizSheet.getRange('C1').setValue(0);
+  quizSheet.getRange('D1').setValue(''); // Reset used questions
+  quizSheet.getRange('B5').setValue(false);
+  quizSheet.getRange('B6').setValue(false);
+  
+  // Start the quiz
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  const usedQuestions = [];
+  let hasRepeats = false;
+  let debugInfo = [];
+  
+  // Collect the first question
+  const firstQuestion = quizSheet.getRange('A4').getValue();
+  if (firstQuestion && firstQuestion !== '') {
+    usedQuestions.push(firstQuestion);
+    debugInfo.push(`Q1: "${firstQuestion}"`);
+  }
+  
+  // Simulate answering questions and check for repetition
+  const maxQuestions = Math.min(5, categoryQuestions.length);
+  for (let i = 1; i < maxQuestions; i++) {
+    // Answer the current question (use Right checkbox)
+    const rightClickEvent = {
+      source: ss,
+      range: quizSheet.getRange('B5'),
+      value: true,
+      oldValue: false
+    };
+    handleCheckboxEdit(rightClickEvent);
+    
+    const currentQuestion = quizSheet.getRange('A4').getValue();
+    
+    // Check if this is a completion message
+    if (currentQuestion && currentQuestion.toString().includes('Quiz Complete')) {
+      debugInfo.push(`Quiz completed at question ${i + 1}`);
+      break;
+    }
+    
+    if (currentQuestion && currentQuestion !== '') {
+      debugInfo.push(`Q${i + 1}: "${currentQuestion}"`);
+      
+      // Check if this question was already used
+      if (usedQuestions.includes(currentQuestion)) {
+        hasRepeats = true;
+        debugInfo.push(`REPEAT DETECTED: "${currentQuestion}" was already used`);
+      } else {
+        usedQuestions.push(currentQuestion);
+      }
+    }
+  }
+  
+  const testPassed = !hasRepeats && usedQuestions.length > 1;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Questions should not be repeated during a quiz session', 
+    testPassed, 
+    testPassed ? 
+      `✓ No repeated questions found. Used ${usedQuestions.length} unique questions` : 
+      `✗ ${hasRepeats ? 'Repeated questions detected' : 'Not enough questions to test'}. Debug: ${debugInfo.join(' | ')}`
+  );
+  
+  return testPassed;
+}
+
+/**
+ * Test that verifies used questions list is properly tracked in cell D1
+ * Returns true if the test passes, false otherwise
+ */
+function testUsedQuestionsTracking() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore
+  const data = datastoreSheet.getDataRange().getValues();
+  const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
+  const testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Reset the quiz state
+  quizSheet.getRange('A1').setValue(testCategory);
+  quizSheet.getRange('B2').setValue(false);
+  quizSheet.getRange('A4').setValue('');
+  quizSheet.getRange('C1').setValue(0);
+  quizSheet.getRange('D1').setValue(''); // Reset used questions
+  quizSheet.getRange('B5').setValue(false);
+  quizSheet.getRange('B6').setValue(false);
+  
+  // Verify used questions list is empty initially
+  const initialUsedQuestions = getUsedQuestions(quizSheet);
+  const initiallyEmpty = Array.isArray(initialUsedQuestions) && initialUsedQuestions.length === 0;
+  
+  // Start the quiz
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  // Check if first question is tracked
+  const firstQuestion = quizSheet.getRange('A4').getValue();
+  const usedQuestionsAfterFirst = getUsedQuestions(quizSheet);
+  const firstQuestionTracked = usedQuestionsAfterFirst.includes(firstQuestion);
+  
+  // Answer the first question to get a second question
+  const rightClickEvent = {
+    source: ss,
+    range: quizSheet.getRange('B5'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(rightClickEvent);
+  
+  const secondQuestion = quizSheet.getRange('A4').getValue();
+  const usedQuestionsAfterSecond = getUsedQuestions(quizSheet);
+  const secondQuestionTracked = !secondQuestion.includes('Quiz Complete') && usedQuestionsAfterSecond.includes(secondQuestion);
+  const bothQuestionsTracked = usedQuestionsAfterSecond.length >= 2 || secondQuestion.includes('Quiz Complete');
+  
+  const testPassed = initiallyEmpty && firstQuestionTracked && (secondQuestionTracked || secondQuestion.includes('Quiz Complete'));
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Used questions should be properly tracked in cell D1', 
+    testPassed, 
+    testPassed ? 
+      `✓ Used questions properly tracked. Initial: ${initialUsedQuestions.length}, After first: ${usedQuestionsAfterFirst.length}, After second: ${usedQuestionsAfterSecond.length}` : 
+      `✗ Tracking failed. Initial empty: ${initiallyEmpty}, First tracked: ${firstQuestionTracked}, Second tracked: ${secondQuestionTracked}, Questions: ["${firstQuestion}", "${secondQuestion}"]`
+  );
+  
+  return testPassed;
+}
+
+/**
+ * Test that verifies used questions list is reset when category changes
+ * Returns true if the test passes, false otherwise
+ */
+function testUsedQuestionsResetOnCategoryChange() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid categories from datastore
+  const data = datastoreSheet.getDataRange().getValues();
+  const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
+  const category1 = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  const category2 = validCategories.length > 1 ? validCategories[1] : validCategories[0];
+  
+  // Setup: Start a quiz and answer a question to populate used questions
+  quizSheet.getRange('A1').setValue(category1);
+  quizSheet.getRange('B2').setValue(true);
+  
+  // Start the quiz
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  // Answer a question to populate used questions
+  const rightClickEvent = {
+    source: ss,
+    range: quizSheet.getRange('B5'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(rightClickEvent);
+  
+  // Verify used questions list has content
+  const usedQuestionsBefore = getUsedQuestions(quizSheet);
+  const hasUsedQuestionsBefore = usedQuestionsBefore.length > 0;
+  
+  // Change category
+  const categoryChangeEvent = {
+    source: ss,
+    range: quizSheet.getRange('A1'),
+    value: category2,
+    oldValue: category1
+  };
+  handleCheckboxEdit(categoryChangeEvent);
+  
+  // Check if used questions list was reset
+  const usedQuestionsAfter = getUsedQuestions(quizSheet);
+  const usedQuestionsReset = usedQuestionsAfter.length === 0;
+  
+  const testPassed = hasUsedQuestionsBefore && usedQuestionsReset;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Used questions list should reset when category changes', 
+    testPassed, 
+    testPassed ? 
+      '✓ Used questions list properly reset when category changed' : 
+      `✗ Reset failed. Before: ${usedQuestionsBefore.length} questions, After: ${usedQuestionsAfter.length} questions`
+  );
+  
+  return testPassed;
+}
+
+/**
+ * Test that verifies used questions list is reset when quiz completes
+ * Returns true if the test passes, false otherwise
+ */
+function testUsedQuestionsResetOnQuizComplete() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get valid category from datastore
+  const data = datastoreSheet.getDataRange().getValues();
+  const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
+  const testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+  
+  // Reset the quiz state
+  quizSheet.getRange('A1').setValue(testCategory);
+  quizSheet.getRange('B2').setValue(false);
+  quizSheet.getRange('A4').setValue('');
+  quizSheet.getRange('C1').setValue(0);
+  quizSheet.getRange('D1').setValue('');
+  quizSheet.getRange('B5').setValue(false);
+  quizSheet.getRange('B6').setValue(false);
+  
+  // Start the quiz manually by directly calling the logic
+  quizSheet.getRange('B2').setValue(true);
+  
+  // Manually trigger the start quiz logic
+  const filtered = datastoreSheet.getDataRange().getValues().filter((row, index) => index !== 0 && row[1] === testCategory);
+  if (filtered.length > 0) {
+    resetUsedQuestions(quizSheet);
+    const random = filtered[Math.floor(Math.random() * filtered.length)];
+    quizSheet.getRange('A4').setValue(random[2]);
+    addUsedQuestion(quizSheet, random[2]);
+    quizSheet.getRange('C1').setValue(1);
+    toggleRightWrongCheckboxes(quizSheet, true);
+  }
+  
+  // Simulate answering 4 more questions to complete the quiz
+  for (let i = 0; i < 4; i++) {
+    showNextQuestion(quizSheet, ss);
+  }
+  
+  // Verify used questions list before final question
+  const usedQuestionsBeforeComplete = getUsedQuestions(quizSheet);
+  const hasUsedQuestionsBeforeComplete = usedQuestionsBeforeComplete.length > 0;
+  
+  // Call showNextQuestion one more time to trigger completion
+  showNextQuestion(quizSheet, ss);
+  
+  // Check if used questions list was reset after completion
+  const usedQuestionsAfterComplete = getUsedQuestions(quizSheet);
+  const usedQuestionsResetAfterComplete = usedQuestionsAfterComplete.length === 0;
+  
+  // Also check if completion message is shown
+  const finalQuestionText = quizSheet.getRange('A4').getValue();
+  const showsCompletionMessage = finalQuestionText && finalQuestionText.toString().includes('Quiz Complete');
+  
+  const testPassed = hasUsedQuestionsBeforeComplete && usedQuestionsResetAfterComplete && showsCompletionMessage;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Used questions list should reset when quiz completes', 
+    testPassed, 
+    testPassed ? 
+      '✓ Used questions list properly reset when quiz completed' : 
+      `✗ Reset failed. Before complete: ${usedQuestionsBeforeComplete.length} questions, After complete: ${usedQuestionsAfterComplete.length} questions, Shows completion: ${showsCompletionMessage}`
+  );
+  
+  return testPassed;
+}
+
+/**
+ * Test that verifies quiz ends early if no more unique questions are available
+ * Returns true if the test passes, false otherwise
+ */
+function testQuizEndsEarlyWhenNoMoreUniqueQuestions() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Find a category with limited questions (ideally 1-3 questions)
+  const data = datastoreSheet.getDataRange().getValues();
+  const categoryQuestionCounts = {};
+  
+  data.slice(1).forEach(row => {
+    if (row[1]) {
+      categoryQuestionCounts[row[1]] = (categoryQuestionCounts[row[1]] || 0) + 1;
+    }
+  });
+  
+  // Find a category with fewer than 5 questions
+  let testCategory = null;
+  let questionCount = 0;
+  for (const [category, count] of Object.entries(categoryQuestionCounts)) {
+    if (count < 5 && count > 1) {
+      testCategory = category;
+      questionCount = count;
+      break;
+    }
+  }
+  
+  // If no category with limited questions, manually create test scenario
+  if (!testCategory) {
+    // Use the first available category but simulate limited questions by pre-populating used questions
+    const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
+    testCategory = validCategories.length > 0 ? validCategories[0] : 'Rishis';
+    
+    // Get all questions for this category
+    const allQuestionsForCategory = data.filter((row, index) => index !== 0 && row[1] === testCategory);
+    
+    // Pre-populate used questions to leave only 2 questions available
+    const preUsedQuestions = allQuestionsForCategory.slice(0, -2).map(row => row[2]);
+    quizSheet.getRange('D1').setValue(JSON.stringify(preUsedQuestions));
+    questionCount = 2;
+  }
+  
+  // Reset other quiz state
+  quizSheet.getRange('A1').setValue(testCategory);
+  quizSheet.getRange('B2').setValue(false);
+  quizSheet.getRange('A4').setValue('');
+  quizSheet.getRange('C1').setValue(0);
+  quizSheet.getRange('B5').setValue(false);
+  quizSheet.getRange('B6').setValue(false);
+  
+  // Start the quiz
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  let questionsAnswered = 1; // First question is loaded when quiz starts
+  let debugInfo = [`Started with ${questionCount} available questions`];
+  
+  // Answer questions until we run out or reach 5
+  for (let i = 1; i < 5; i++) {
+    const rightClickEvent = {
+      source: ss,
+      range: quizSheet.getRange('B5'),
+      value: true,
+      oldValue: false
+    };
+    handleCheckboxEdit(rightClickEvent);
+    
+    const currentQuestion = quizSheet.getRange('A4').getValue();
+    
+    if (currentQuestion && currentQuestion.toString().includes('Quiz Complete')) {
+      debugInfo.push(`Quiz ended at question ${questionsAnswered} with completion message`);
+      break;
+    } else if (currentQuestion && currentQuestion !== '') {
+      questionsAnswered++;
+      debugInfo.push(`Question ${questionsAnswered} shown`);
+    }
+  }
+  
+  const finalQuestionText = quizSheet.getRange('A4').getValue();
+  const showsEarlyCompletionMessage = finalQuestionText && (
+    finalQuestionText.toString().includes('Quiz Complete') || 
+    finalQuestionText.toString().includes('No more unique questions')
+  );
+  const endedEarly = questionsAnswered < 5;
+  const startQuizUnchecked = quizSheet.getRange('B2').getValue() === false;
+  
+  const testPassed = endedEarly && showsEarlyCompletionMessage && startQuizUnchecked;
+  
+  // Record result in the test sheet
+  recordTestResult(
+    'Quiz should end early when no more unique questions are available', 
+    testPassed, 
+    testPassed ? 
+      `✓ Quiz properly ended early after ${questionsAnswered} questions` : 
+      `✗ Early end failed. Questions answered: ${questionsAnswered}, Shows completion: ${showsEarlyCompletionMessage}, Start Quiz unchecked: ${startQuizUnchecked}. Debug: ${debugInfo.join(' | ')}`
+  );
+  
+  return testPassed;
+}
+
+/**
  * Run all unit tests and record results in the test results sheet
  */
 function runAllTests() {
@@ -502,6 +911,12 @@ function runAllTests() {
   testQuestionCounterResetsOnCategoryChange();
   
   // Add more tests here as needed
+  // Test 8:
+  testQuestionsNotRepeated();
+  testUsedQuestionsTracking();
+  testUsedQuestionsResetOnCategoryChange();
+  testUsedQuestionsResetOnQuizComplete();
+  testQuizEndsEarlyWhenNoMoreUniqueQuestions()
 }
 
 /**
