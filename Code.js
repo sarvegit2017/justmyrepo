@@ -60,6 +60,7 @@ function toggleRightWrongCheckboxes(sheet, enable) {
         protection.remove();
       }
     });
+    // Don't clear checkbox values when enabling - preserve existing state
   } else {
     // Add protection to disable checkboxes
     rightCheckbox.protect().setDescription('Right checkbox - disabled until quiz starts');
@@ -200,6 +201,12 @@ function handleCheckboxEdit(e) {
           setQuestionCounter(sheet, 1); // Start with question 1
           // Enable Right/Wrong/Show Answer checkboxes when quiz starts
           toggleRightWrongCheckboxes(sheet, true);
+          
+          // Check if Show Answer checkbox is already checked and display answer if so
+          const showAnswerChecked = sheet.getRange('B7').getValue();
+          if (showAnswerChecked) {
+            toggleAnswer(sheet, e.source, true);
+          }
         } else {
           questionCell.setValue("No more questions available for this category.");
           resetQuestionCounter(sheet);
