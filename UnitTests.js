@@ -4,11 +4,11 @@ function setupTestResultsSheet() {
 
   if (!testSheet) {
     testSheet = ss.insertSheet('testResults');
-    testSheet.getRange('A1:C1').setValues([['Test Name', 'Result', 'Details']]);
-    testSheet.getRange('A1:C1').setFontWeight('bold');
+    testSheet.getRange('A1:D1').setValues([['Unit Test Name', 'Test Name', 'Result', 'Details']]);
+    testSheet.getRange('A1:D1').setFontWeight('bold');
     testSheet.setFrozenRows(1);
-    testSheet.autoResizeColumns(1, 3);
-    testSheet.setColumnWidth(3, 300);
+    testSheet.autoResizeColumns(1, 4);
+    testSheet.setColumnWidth(4, 300);
   }
   return testSheet;
 }
@@ -20,28 +20,29 @@ function clearTestResults() {
   if (testSheet) {
     const lastRow = testSheet.getLastRow();
     if (lastRow > 1) {
-      testSheet.getRange(2, 1, lastRow - 1, 3).clearContent();
-      testSheet.getRange(2, 1, lastRow - 1, 3).clearFormat();
+      testSheet.getRange(2, 1, lastRow - 1, 4).clearContent();
+      testSheet.getRange(2, 1, lastRow - 1, 4).clearFormat();
     }
   }
 }
 
-function recordTestResult(testName, passed, details) {
+function recordTestResult(unitTestName, testName, passed, details) {
   const testSheet = setupTestResultsSheet();
   const lastRow = Math.max(1, testSheet.getLastRow());
 
-  testSheet.getRange(lastRow + 1, 1, 1, 3).setValues([
+  testSheet.getRange(lastRow + 1, 1, 1, 4).setValues([
     [
+      unitTestName,
       testName,
       passed ? 'PASSED' : 'FAILED',
       details
     ]
   ]);
 
-  const resultCell = testSheet.getRange(lastRow + 1, 2);
+  const resultCell = testSheet.getRange(lastRow + 1, 3);
   resultCell.setBackground(passed ? '#b7e1cd' : '#f4c7c3');
 
-  testSheet.autoResizeColumns(1, 3);
+  testSheet.autoResizeColumns(1, 4);
 }
 
 function isRangeProtected(sheet, rangeA1) {
@@ -114,6 +115,7 @@ function testCategoryClearsCheckbox() {
   const checkboxUnchecked = checkboxValue === false;
 
   recordTestResult(
+    'testCategoryClearsCheckbox',
     'When category is changed, checkbox in B2 should be cleared',
     checkboxUnchecked,
     checkboxUnchecked ?
@@ -155,6 +157,7 @@ function testRightWrongCheckboxesDisabledWhenQuizNotStarted() {
   const testPassed = rightProtected && wrongProtected && rightUnchecked && wrongUnchecked;
 
   recordTestResult(
+    'testRightWrongCheckboxesDisabledWhenQuizNotStarted',
     'Right and Wrong checkboxes should be disabled when Start Quiz is unchecked',
     testPassed,
     testPassed ?
@@ -195,6 +198,7 @@ function testRightWrongCheckboxesEnabledWhenQuizStarted() {
   const testPassed = rightNotProtected && wrongNotProtected && questionLoaded;
 
   recordTestResult(
+    'testRightWrongCheckboxesEnabledWhenQuizStarted',
     'Right and Wrong checkboxes should be enabled when Start Quiz is checked',
     testPassed,
     testPassed ?
@@ -243,6 +247,7 @@ function testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted() {
   const testPassed = rightAutoUnchecked && wrongAutoUnchecked;
 
   recordTestResult(
+    'testRightWrongCheckboxesAutoUncheckWhenQuizNotStarted',
     'Right and Wrong checkboxes should auto-uncheck when clicked while Start Quiz is unchecked',
     testPassed,
     testPassed ?
@@ -313,6 +318,7 @@ function testQuizCompletesAfter5Questions() {
   const testPassed = isCompletionMessage && startQuizUnchecked && rightCheckboxDisabled && wrongCheckboxDisabled && questionCounterReset;
 
   recordTestResult(
+    'testQuizCompletesAfter5Questions',
     'Quiz should complete after 5 questions with completion message',
     testPassed,
     testPassed ?
@@ -371,6 +377,7 @@ function testQuestionCounterResetsOnCategoryChange() {
   const testPassed = counterBefore > 0 && counterReset;
 
   recordTestResult(
+    'testQuestionCounterResetsOnCategoryChange',
     'Question counter should reset when category is changed',
     testPassed,
     testPassed ?
@@ -497,6 +504,7 @@ function testQuestionsNotRepeated() {
     const testPassed = !hasRepeats && usedQuestions.length >= 2;
 
     recordTestResult(
+      'testQuestionsNotRepeated',
       'Questions should not be repeated during a quiz session',
       testPassed,
       testPassed ?
@@ -576,6 +584,7 @@ function testUsedQuestionsTracking() {
   const testPassed = initiallyEmpty && firstQuestionTracked && (secondQuestionTracked || secondQuestion.includes('Quiz Complete') || usedQuestionsAfterSecond.length >= 2);
 
   recordTestResult(
+    'testUsedQuestionsTracking',
     'Used questions should be properly tracked in cell D1',
     testPassed,
     testPassed ?
@@ -634,6 +643,7 @@ function testUsedQuestionsResetOnCategoryChange() {
   const testPassed = hasUsedQuestionsBefore && usedQuestionsReset;
 
   recordTestResult(
+    'testUsedQuestionsResetOnCategoryChange',
     'Used questions list should reset when category changes',
     testPassed,
     testPassed ?
@@ -692,6 +702,7 @@ function testUsedQuestionsResetOnQuizComplete() {
   const testPassed = hasUsedQuestionsBeforeComplete && usedQuestionsResetAfterComplete && showsCompletionMessage;
 
   recordTestResult(
+    'testUsedQuestionsResetOnQuizComplete',
     'Used questions list should reset when quiz completes',
     testPassed,
     testPassed ?
@@ -726,6 +737,7 @@ function testShowAnswerCheckboxDisabledWhenQuizNotStarted() {
   const isShowAnswerProtected = isRangeProtected(quizSheet, 'B7');
   
   recordTestResult(
+    'testShowAnswerCheckboxDisabledWhenQuizNotStarted',
     'Show Answer checkbox should be disabled when quiz is not started',
     isShowAnswerProtected,
     isShowAnswerProtected ? 
@@ -815,6 +827,7 @@ function testShowAnswerDisplaysCorrectAnswer() {
     const categoryData = data.filter((row, index) => index !== 0 && row[1] === testCategory);
     
     recordTestResult(
+      'testShowAnswerCheckboxDisabledWhenQuizNotStarted',
       'Show Answer checkbox should display the correct answer when checked',
       false,
       `✗ No question loaded after starting quiz. Category: "${testCategory}", Questions in category: ${categoryData.length}, First question in category: "${categoryData.length > 0 ? categoryData[0][2] : 'none'}"`
@@ -850,6 +863,7 @@ function testShowAnswerDisplaysCorrectAnswer() {
   const testPassed = displayedAnswer !== '' && displayedAnswer === expectedAnswer;
   
   recordTestResult(
+    'testShowAnswerDisplaysCorrectAnswer',
     'Show Answer checkbox should display the correct answer when checked',
     testPassed,
     testPassed ? 
@@ -966,6 +980,7 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
   const testPassed = answerWhenChecked !== '' && answerWhenUnchecked === '';
   
   recordTestResult(
+    'testShowAnswerHidesAnswerWhenUnchecked',
     'Show Answer checkbox should hide the answer when unchecked',
     testPassed,
     testPassed ? 

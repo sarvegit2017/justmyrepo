@@ -4,11 +4,11 @@ function setupTestResultsSheet() {
 
   if (!testSheet) {
     testSheet = ss.insertSheet('testResults');
-    testSheet.getRange('A1:C1').setValues([['Test Name', 'Result', 'Details']]);
-    testSheet.getRange('A1:C1').setFontWeight('bold');
+    testSheet.getRange('A1:D1').setValues([['Unit Test Name', 'Test Name', 'Result', 'Details']]);
+    testSheet.getRange('A1:D1').setFontWeight('bold');
     testSheet.setFrozenRows(1);
-    testSheet.autoResizeColumns(1, 3);
-    testSheet.setColumnWidth(3, 300);
+    testSheet.autoResizeColumns(1, 4);
+    testSheet.setColumnWidth(4, 300);
   }
   return testSheet;
 }
@@ -20,28 +20,29 @@ function clearTestResults() {
   if (testSheet) {
     const lastRow = testSheet.getLastRow();
     if (lastRow > 1) {
-      testSheet.getRange(2, 1, lastRow - 1, 3).clearContent();
-      testSheet.getRange(2, 1, lastRow - 1, 3).clearFormat();
+      testSheet.getRange(2, 1, lastRow - 1, 4).clearContent();
+      testSheet.getRange(2, 1, lastRow - 1, 4).clearFormat();
     }
   }
 }
 
-function recordTestResult(testName, passed, details) {
+function recordTestResult(unitTestName, testName, passed, details) {
   const testSheet = setupTestResultsSheet();
   const lastRow = Math.max(1, testSheet.getLastRow());
 
-  testSheet.getRange(lastRow + 1, 1, 1, 3).setValues([
+  testSheet.getRange(lastRow + 1, 1, 1, 4).setValues([
     [
+      unitTestName,
       testName,
       passed ? 'PASSED' : 'FAILED',
       details
     ]
   ]);
 
-  const resultCell = testSheet.getRange(lastRow + 1, 2);
+  const resultCell = testSheet.getRange(lastRow + 1, 3);
   resultCell.setBackground(passed ? '#b7e1cd' : '#f4c7c3');
 
-  testSheet.autoResizeColumns(1, 3);
+  testSheet.autoResizeColumns(1, 4);
 }
 
 function isRangeProtected(sheet, rangeA1) {
@@ -84,6 +85,7 @@ function testCategoryClearsQuestionCell() {
   const a4Cleared = a4Value === '';
 
   recordTestResult(
+    'testCategoryClearsQuestionCell',
     'When category is changed, cell A4 should be cleared',
     a4Cleared,
     a4Cleared ?
@@ -100,5 +102,5 @@ function testCategoryClearsQuestionCell() {
 function runAllTestsGit() {
   clearTestResults();
 
-  testCategoryClearsQuestionCell
+  testCategoryClearsQuestionCell();
 }
