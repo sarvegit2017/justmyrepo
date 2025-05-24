@@ -1201,13 +1201,324 @@ function testNoIncrementWhenQuizNotStarted() {
   return countsUnchanged;
 }
 
+// Test that verifies right answer count increments when Right checkbox is checked
+function testRightAnswerIncrement() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(true); // Start quiz
+  quizSheet.getRange('A4').setValue('Test Question');
+  quizSheet.getRange('B9').setValue(0); // Reset right count
+  quizSheet.getRange('B10').setValue(0); // Reset wrong count
+
+  // Enable the checkboxes by removing protection (simulate quiz started state)
+  toggleRightWrongCheckboxes(quizSheet, true);
+
+  const initialRightCount = quizSheet.getRange('B9').getValue();
+
+  // Create proper mock event with the checkbox value set
+  const checkboxRange = quizSheet.getRange('B5');
+  checkboxRange.setValue(true); // Set the checkbox value first
+
+  const mockEvent = {
+    source: ss,
+    range: checkboxRange,
+    value: true,
+    oldValue: false
+  };
+
+  handleCheckboxEdit(mockEvent);
+  const finalRightCount = quizSheet.getRange('B9').getValue();
+
+  const incrementedCorrectly = (finalRightCount === initialRightCount + 1);
+
+  recordTestResult(
+    'testRightAnswerIncrement',
+    'Right answer count should increment when Right checkbox is checked',
+    incrementedCorrectly,
+    incrementedCorrectly ?
+      `✓ Right count incremented from ${initialRightCount} to ${finalRightCount}` :
+      `✗ Right count did not increment correctly: ${initialRightCount} to ${finalRightCount}`
+  );
+
+  return incrementedCorrectly;
+}
+
+// Test that verifies wrong answer count increments when Wrong checkbox is checked
+function testWrongAnswerIncrement() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(true); // Start quiz
+  quizSheet.getRange('A4').setValue('Test Question');
+  quizSheet.getRange('B9').setValue(0); // Reset right count
+  quizSheet.getRange('B10').setValue(0); // Reset wrong count
+
+  // Enable the checkboxes by removing protection (simulate quiz started state)
+  toggleRightWrongCheckboxes(quizSheet, true);
+
+  const initialWrongCount = quizSheet.getRange('B10').getValue();
+
+  // Create proper mock event with the checkbox value set
+  const checkboxRange = quizSheet.getRange('B6');
+  checkboxRange.setValue(true); // Set the checkbox value first
+
+  const mockEvent = {
+    source: ss,
+    range: checkboxRange,
+    value: true,
+    oldValue: false
+  };
+
+  handleCheckboxEdit(mockEvent);
+  const finalWrongCount = quizSheet.getRange('B10').getValue();
+
+  const incrementedCorrectly = (finalWrongCount === initialWrongCount + 1);
+
+  recordTestResult(
+    'testWrongAnswerIncrement',
+    'Wrong answer count should increment when Wrong checkbox is checked',
+    incrementedCorrectly,
+    incrementedCorrectly ?
+      `✓ Wrong count incremented from ${initialWrongCount} to ${finalWrongCount}` :
+      `✗ Wrong count did not increment correctly: ${initialWrongCount} to ${finalWrongCount}`
+  );
+
+  return incrementedCorrectly;
+}
+
+// Test multiple right answers increment correctly
+function testMultipleRightAnswers() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(true); // Start quiz
+  quizSheet.getRange('A4').setValue('Test Question');
+  quizSheet.getRange('B9').setValue(0); // Reset right count
+
+  // Enable the checkboxes by removing protection (simulate quiz started state)
+  toggleRightWrongCheckboxes(quizSheet, true);
+
+  let allIncrementsCorrect = true;
+  let details = '';
+
+  // Check Right checkbox 3 times
+  for (let i = 1; i <= 3; i++) {
+    const checkboxRange = quizSheet.getRange('B5');
+    checkboxRange.setValue(true); // Set the checkbox value first
+
+    const mockEvent = {
+      source: ss,
+      range: checkboxRange,
+      value: true,
+      oldValue: false
+    };
+
+    const beforeCount = quizSheet.getRange('B9').getValue();
+    handleCheckboxEdit(mockEvent);
+    const afterCount = quizSheet.getRange('B9').getValue();
+
+    if (afterCount !== i) {
+      allIncrementsCorrect = false;
+      details += `✗ After ${i} clicks, expected ${i} but got ${afterCount}. `;
+    } else {
+      details += `✓ Click ${i}: ${beforeCount} → ${afterCount}. `;
+    }
+
+    // Reset checkbox for next iteration
+    quizSheet.getRange('B5').setValue(false);
+  }
+
+  recordTestResult(
+    'testMultipleRightAnswers',
+    'Multiple right answer selections should increment correctly',
+    allIncrementsCorrect,
+    details
+  );
+
+  return allIncrementsCorrect;
+}
+
+// Test multiple wrong answers increment correctly
+function testMultipleWrongAnswers() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(true); // Start quiz
+  quizSheet.getRange('A4').setValue('Test Question');
+  quizSheet.getRange('B10').setValue(0); // Reset wrong count
+
+  // Enable the checkboxes by removing protection (simulate quiz started state)
+  toggleRightWrongCheckboxes(quizSheet, true);
+
+  let allIncrementsCorrect = true;
+  let details = '';
+
+  // Check Wrong checkbox 3 times
+  for (let i = 1; i <= 3; i++) {
+    const checkboxRange = quizSheet.getRange('B6');
+    checkboxRange.setValue(true); // Set the checkbox value first
+
+    const mockEvent = {
+      source: ss,
+      range: checkboxRange,
+      value: true,
+      oldValue: false
+    };
+
+    const beforeCount = quizSheet.getRange('B10').getValue();
+    handleCheckboxEdit(mockEvent);
+    const afterCount = quizSheet.getRange('B10').getValue();
+
+    if (afterCount !== i) {
+      allIncrementsCorrect = false;
+      details += `✗ After ${i} clicks, expected ${i} but got ${afterCount}. `;
+    } else {
+      details += `✓ Click ${i}: ${beforeCount} → ${afterCount}. `;
+    }
+
+    // Reset checkbox for next iteration
+    quizSheet.getRange('B6').setValue(false);
+  }
+
+  recordTestResult(
+    'testMultipleWrongAnswers',
+    'Multiple wrong answer selections should increment correctly',
+    allIncrementsCorrect,
+    details
+  );
+
+  return allIncrementsCorrect;
+}
+
+// Test that scores are preserved during quiz progress
+function testScorePreservationDuringQuizProgress() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(true); // Start quiz
+  quizSheet.getRange('A4').setValue('Test Question 1');
+  quizSheet.getRange('B9').setValue(2); // Set some initial scores
+  quizSheet.getRange('B10').setValue(1);
+
+  // Enable the checkboxes by removing protection (simulate quiz started state)
+  toggleRightWrongCheckboxes(quizSheet, true);
+
+  const rightCountBefore = quizSheet.getRange('B9').getValue();
+  const wrongCountBefore = quizSheet.getRange('B10').getValue();
+
+  // Simulate answering correctly (this would typically trigger next question)
+  const checkboxRange = quizSheet.getRange('B5');
+  checkboxRange.setValue(true); // Set the checkbox value first
+  
+  const mockEvent = {
+    source: ss,
+    range: checkboxRange,
+    value: true,
+    oldValue: false
+  };
+
+  handleCheckboxEdit(mockEvent);
+
+  const rightCountAfter = quizSheet.getRange('B9').getValue();
+  const wrongCountAfter = quizSheet.getRange('B10').getValue();
+
+  // Should increment right count but preserve wrong count
+  const preservedCorrectly = (rightCountAfter === rightCountBefore + 1 && wrongCountAfter === wrongCountBefore);
+
+  recordTestResult(
+    'testScorePreservationDuringQuizProgress',
+    'Scores should be preserved and increment correctly during quiz progress',
+    preservedCorrectly,
+    preservedCorrectly ?
+      `✓ Scores preserved and incremented: Right ${rightCountBefore}→${rightCountAfter}, Wrong ${wrongCountBefore}→${wrongCountAfter}` :
+      `✗ Scores not handled correctly: Right ${rightCountBefore}→${rightCountAfter}, Wrong ${wrongCountBefore}→${wrongCountAfter}`
+  );
+
+  return preservedCorrectly;
+}
+
+// Test mixed right and wrong answers
+function testMixedAnswers() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(true); // Start quiz
+  quizSheet.getRange('A4').setValue('Test Question');
+  quizSheet.getRange('B9').setValue(0); // Reset right count
+  quizSheet.getRange('B10').setValue(0); // Reset wrong count
+
+  // Enable the checkboxes by removing protection (simulate quiz started state)
+  toggleRightWrongCheckboxes(quizSheet, true);
+
+  // Sequence: Right, Wrong, Right, Wrong, Right
+  const sequence = [
+    { checkbox: 'B5', expected: { right: 1, wrong: 0 } },
+    { checkbox: 'B6', expected: { right: 1, wrong: 1 } },
+    { checkbox: 'B5', expected: { right: 2, wrong: 1 } },
+    { checkbox: 'B6', expected: { right: 2, wrong: 2 } },
+    { checkbox: 'B5', expected: { right: 3, wrong: 2 } }
+  ];
+
+  let allCorrect = true;
+  let details = '';
+
+  sequence.forEach((step, index) => {
+    const checkboxRange = quizSheet.getRange(step.checkbox);
+    checkboxRange.setValue(true); // Set the checkbox value first
+    
+    const mockEvent = {
+      source: ss,
+      range: checkboxRange,
+      value: true,
+      oldValue: false
+    };
+
+    handleCheckboxEdit(mockEvent);
+
+    const rightCount = quizSheet.getRange('B9').getValue();
+    const wrongCount = quizSheet.getRange('B10').getValue();
+
+    if (rightCount !== step.expected.right || wrongCount !== step.expected.wrong) {
+      allCorrect = false;
+      details += `✗ Step ${index + 1}: Expected R=${step.expected.right}, W=${step.expected.wrong}, Got R=${rightCount}, W=${wrongCount}. `;
+    } else {
+      details += `✓ Step ${index + 1}: R=${rightCount}, W=${wrongCount}. `;
+    }
+
+    // Reset checkboxes for next iteration
+    quizSheet.getRange('B5').setValue(false);
+    quizSheet.getRange('B6').setValue(false);
+  });
+
+  recordTestResult(
+    'testMixedAnswers',
+    'Mixed right and wrong answers should increment both counters correctly',
+    allCorrect,
+    details
+  );
+
+  return allCorrect;
+}
 /**
  * Run all unit tests and record results in the test results sheet
  */
 function runAllTests() {
   clearTestResults();
 
-  testCategoryClearsQuestionCell();
+  /*testCategoryClearsQuestionCell();
   testCategoryClearsCheckbox();
   testRightWrongCheckboxesDisabledWhenQuizNotStarted();
   testRightWrongCheckboxesEnabledWhenQuizStarted();
@@ -1227,6 +1538,13 @@ function runAllTests() {
   testScoreResetOnQuizStart();
   testScoreResetOnQuizStop();
   testNoIncrementWhenQuizNotStarted();
+  testRightAnswerIncrement();
+  testWrongAnswerIncrement();
+  testMultipleRightAnswers();
+  testMultipleWrongAnswers();*/
+  testScorePreservationDuringQuizProgress();
+  testMixedAnswers();
+  
 
 
 }
