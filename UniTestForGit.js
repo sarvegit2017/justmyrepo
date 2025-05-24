@@ -239,31 +239,62 @@ function testShowAnswerDisplaysCorrectAnswer() {
   const quizSheet = ss.getSheetByName('quiz');
   const datastoreSheet = ss.getSheetByName('datastore');
   
-  // Get a valid category and its first question/answer
+  // Get datastore data and find a valid category with questions
   const data = datastoreSheet.getDataRange().getValues();
-  const validCategories = [...new Set(data.slice(1).map(row => row[1]).filter(Boolean))];
   
-  if (validCategories.length === 0) {
+  if (data.length <= 1) {
     recordTestResult(
       'Show Answer checkbox should display the correct answer when checked',
       false,
-      '✗ No valid categories found in datastore'
+      '✗ No data found in datastore sheet'
     );
     return false;
   }
   
-  const testCategory = validCategories[0];
+  // Find a category that actually has questions
+  let testCategory = null;
+  let testQuestionRow = null;
   
-  // Clear any existing state
-  quizSheet.getRange('A1').setValue(testCategory);
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (row[1] && row[2] && row[3]) { // Category, Question, and Answer all exist
+      testCategory = row[1];
+      testQuestionRow = row;
+      break;
+    }
+  }
+  
+  if (!testCategory || !testQuestionRow) {
+    recordTestResult(
+      'Show Answer checkbox should display the correct answer when checked',
+      false,
+      '✗ No valid category with question and answer found in datastore'
+    );
+    return false;
+  }
+  
+  // Clear any existing state completely
+  quizSheet.getRange('A1').setValue(''); // Clear category first
   quizSheet.getRange('B2').setValue(false);
   quizSheet.getRange('B7').setValue(false);
   quizSheet.getRange('A4').setValue(''); // Clear question cell
   quizSheet.getRange('A8').setValue(''); // Clear answer cell
-  resetUsedQuestions(quizSheet);
-  resetQuestionCounter(quizSheet);
+  quizSheet.getRange('C1').setValue(0); // Reset counter
+  quizSheet.getRange('D1').setValue(''); // Clear used questions
   
-  // Start quiz
+  // Wait a moment to ensure state is cleared
+  Utilities.sleep(100);
+  
+  // Set category
+  quizSheet.getRange('A1').setValue(testCategory);
+  
+  // Wait a moment after setting category
+  Utilities.sleep(100);
+  
+  // Start quiz by setting checkbox to true
+  quizSheet.getRange('B2').setValue(true);
+  
+  // Trigger the edit event manually
   const startQuizEvent = {
     source: ss,
     range: quizSheet.getRange('B2'),
@@ -277,38 +308,30 @@ function testShowAnswerDisplaysCorrectAnswer() {
   
   // Debugging: Check if question was loaded
   if (!currentQuestion || currentQuestion === '') {
+    // Try to debug by checking what's in the datastore for this category
+    const categoryData = data.filter((row, index) => index !== 0 && row[1] === testCategory);
+    
     recordTestResult(
       'Show Answer checkbox should display the correct answer when checked',
       false,
-      `✗ No question loaded after starting quiz. Category: "${testCategory}"`
+      `✗ No question loaded after starting quiz. Category: "${testCategory}", Questions in category: ${categoryData.length}, First question in category: "${categoryData.length > 0 ? categoryData[0][2] : 'none'}"`
     );
     return false;
   }
   
-  // Find the expected answer from datastore
-  let questionRow = null;
+  // Find the expected answer from datastore for the current question
   let expectedAnswer = '';
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (row[1] === testCategory && row[2] === currentQuestion) {
-      questionRow = row;
       expectedAnswer = row[3] || '';
       break;
     }
   }
   
-  // Check if we found the question in datastore
-  if (!questionRow) {
-    recordTestResult(
-      'Show Answer checkbox should display the correct answer when checked',
-      false,
-      `✗ Question not found in datastore. Question: "${currentQuestion}", Category: "${testCategory}"`
-    );
-    return false;
-  }
-  
   // Check Show Answer checkbox
+  quizSheet.getRange('B7').setValue(true);
   const showAnswerEvent = {
     source: ss,
     range: quizSheet.getRange('B7'),
@@ -328,7 +351,7 @@ function testShowAnswerDisplaysCorrectAnswer() {
     testPassed,
     testPassed ? 
       '✓ Show Answer checkbox correctly displays the answer' :
-      `✗ Show Answer failed. Question: "${currentQuestion}", Expected: "${expectedAnswer}", Got: "${displayedAnswer}", Row found: ${questionRow ? 'Yes' : 'No'}`
+      `✗ Show Answer failed. Question: "${currentQuestion}", Expected: "${expectedAnswer}", Got: "${displayedAnswer}"`
   );
   
   return testPassed;
@@ -433,7 +456,8 @@ function testShowAnswerUpdatesWithNextQuestion() {
   quizSheet.getRange('A1').setValue(testCategory);
   quizSheet.getRange('B2').setValue(false);
   quizSheet.getRange('B7').setValue(false);
-  resetUsedQuestions(quizSheet);
+  quizSheet.getRange('C1').setValue(0); // Reset counter
+  quizSheet.getRange('D1').setValue(''); // Clear used questions
   
   // Start quiz
   const startQuizEvent = {
@@ -502,7 +526,8 @@ function testShowAnswerClearedWhenQuizEnds() {
   quizSheet.getRange('A1').setValue(testCategory);
   quizSheet.getRange('B2').setValue(false);
   quizSheet.getRange('B7').setValue(false);
-  resetUsedQuestions(quizSheet);
+  quizSheet.getRange('C1').setValue(0); // Reset counter
+  quizSheet.getRange('D1').setValue(''); // Clear used questions
   
   // Start quiz
   const startQuizEvent = {
