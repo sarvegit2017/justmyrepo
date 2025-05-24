@@ -556,7 +556,7 @@ function testUsedQuestionsTracking() {
       getA1Notation: () => 'B2'
     }
   };
-  
+
   handleCheckboxEdit(startQuizEvent);
 
   const firstQuestion = quizSheet.getRange('A4').getValue();
@@ -573,7 +573,7 @@ function testUsedQuestionsTracking() {
       getA1Notation: () => 'B5'
     }
   };
-  
+
   handleCheckboxEdit(rightClickEvent);
 
   const secondQuestion = quizSheet.getRange('A4').getValue();
@@ -717,13 +717,13 @@ function testUsedQuestionsResetOnQuizComplete() {
 function testShowAnswerCheckboxDisabledWhenQuizNotStarted() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const quizSheet = ss.getSheetByName('quiz');
-  
+
   // Reset quiz state
   quizSheet.getRange('B2').setValue(false); // Uncheck Start Quiz
   quizSheet.getRange('B7').setValue(false); // Uncheck Show Answer
   quizSheet.getRange('A4').setValue(''); // Clear question
   quizSheet.getRange('A8').setValue(''); // Clear answer
-  
+
   // Trigger the edit event to disable checkboxes
   const stopQuizEvent = {
     source: ss,
@@ -732,19 +732,19 @@ function testShowAnswerCheckboxDisabledWhenQuizNotStarted() {
     oldValue: true
   };
   handleCheckboxEdit(stopQuizEvent);
-  
+
   // Check if Show Answer checkbox is protected (disabled)
   const isShowAnswerProtected = isRangeProtected(quizSheet, 'B7');
-  
+
   recordTestResult(
     'testShowAnswerCheckboxDisabledWhenQuizNotStarted',
     'Show Answer checkbox should be disabled when quiz is not started',
     isShowAnswerProtected,
-    isShowAnswerProtected ? 
+    isShowAnswerProtected ?
       '✓ Show Answer checkbox is properly disabled when quiz is not started' :
       '✗ Show Answer checkbox is not disabled when quiz is not started'
   );
-  
+
   return isShowAnswerProtected;
 }
 
@@ -753,10 +753,10 @@ function testShowAnswerDisplaysCorrectAnswer() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const quizSheet = ss.getSheetByName('quiz');
   const datastoreSheet = ss.getSheetByName('datastore');
-  
+
   // Get datastore data and find a valid category with questions
   const data = datastoreSheet.getDataRange().getValues();
-  
+
   if (data.length <= 1) {
     recordTestResult(
       'Show Answer checkbox should display the correct answer when checked',
@@ -765,11 +765,11 @@ function testShowAnswerDisplaysCorrectAnswer() {
     );
     return false;
   }
-  
+
   // Find a category that actually has questions
   let testCategory = null;
   let testQuestionRow = null;
-  
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (row[1] && row[2] && row[3]) { // Category, Question, and Answer all exist
@@ -778,7 +778,7 @@ function testShowAnswerDisplaysCorrectAnswer() {
       break;
     }
   }
-  
+
   if (!testCategory || !testQuestionRow) {
     recordTestResult(
       'Show Answer checkbox should display the correct answer when checked',
@@ -787,7 +787,7 @@ function testShowAnswerDisplaysCorrectAnswer() {
     );
     return false;
   }
-  
+
   // Clear any existing state completely
   quizSheet.getRange('A1').setValue(''); // Clear category first
   quizSheet.getRange('B2').setValue(false);
@@ -796,19 +796,19 @@ function testShowAnswerDisplaysCorrectAnswer() {
   quizSheet.getRange('A8').setValue(''); // Clear answer cell
   quizSheet.getRange('C1').setValue(0); // Reset counter
   quizSheet.getRange('D1').setValue(''); // Clear used questions
-  
+
   // Wait a moment to ensure state is cleared
   Utilities.sleep(100);
-  
+
   // Set category
   quizSheet.getRange('A1').setValue(testCategory);
-  
+
   // Wait a moment after setting category
   Utilities.sleep(100);
-  
+
   // Start quiz by setting checkbox to true
   quizSheet.getRange('B2').setValue(true);
-  
+
   // Trigger the edit event manually
   const startQuizEvent = {
     source: ss,
@@ -817,15 +817,15 @@ function testShowAnswerDisplaysCorrectAnswer() {
     oldValue: false
   };
   handleCheckboxEdit(startQuizEvent);
-  
+
   // Get the current question after quiz starts
   const currentQuestion = quizSheet.getRange('A4').getValue();
-  
+
   // Debugging: Check if question was loaded
   if (!currentQuestion || currentQuestion === '') {
     // Try to debug by checking what's in the datastore for this category
     const categoryData = data.filter((row, index) => index !== 0 && row[1] === testCategory);
-    
+
     recordTestResult(
       'testShowAnswerCheckboxDisabledWhenQuizNotStarted',
       'Show Answer checkbox should display the correct answer when checked',
@@ -834,10 +834,10 @@ function testShowAnswerDisplaysCorrectAnswer() {
     );
     return false;
   }
-  
+
   // Find the expected answer from datastore for the current question
   let expectedAnswer = '';
-  
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (row[1] === testCategory && row[2] === currentQuestion) {
@@ -845,7 +845,7 @@ function testShowAnswerDisplaysCorrectAnswer() {
       break;
     }
   }
-  
+
   // Check Show Answer checkbox
   quizSheet.getRange('B7').setValue(true);
   const showAnswerEvent = {
@@ -855,22 +855,22 @@ function testShowAnswerDisplaysCorrectAnswer() {
     oldValue: false
   };
   handleCheckboxEdit(showAnswerEvent);
-  
+
   // Get the displayed answer
   const displayedAnswer = quizSheet.getRange('A8').getValue();
-  
+
   // Test passes if answer is displayed and matches expected answer
   const testPassed = displayedAnswer !== '' && displayedAnswer === expectedAnswer;
-  
+
   recordTestResult(
     'testShowAnswerDisplaysCorrectAnswer',
     'Show Answer checkbox should display the correct answer when checked',
     testPassed,
-    testPassed ? 
+    testPassed ?
       '✓ Show Answer checkbox correctly displays the answer' :
       `✗ Show Answer failed. Question: "${currentQuestion}", Expected: "${expectedAnswer}", Got: "${displayedAnswer}"`
   );
-  
+
   return testPassed;
 }
 
@@ -879,10 +879,10 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const quizSheet = ss.getSheetByName('quiz');
   const datastoreSheet = ss.getSheetByName('datastore');
-  
+
   // Get datastore data and find a valid category with questions
   const data = datastoreSheet.getDataRange().getValues();
-  
+
   if (data.length <= 1) {
     recordTestResult(
       'Show Answer checkbox should hide the answer when unchecked',
@@ -891,10 +891,10 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
     );
     return false;
   }
-  
+
   // Find a category that actually has questions
   let testCategory = null;
-  
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (row[1] && row[2] && row[3]) { // Category, Question, and Answer all exist
@@ -902,7 +902,7 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
       break;
     }
   }
-  
+
   if (!testCategory) {
     recordTestResult(
       'Show Answer checkbox should hide the answer when unchecked',
@@ -911,7 +911,7 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
     );
     return false;
   }
-  
+
   // Clear any existing state completely
   quizSheet.getRange('A1').setValue(''); // Clear category first  
   quizSheet.getRange('B2').setValue(false);
@@ -920,16 +920,16 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
   quizSheet.getRange('A8').setValue(''); // Clear answer cell
   quizSheet.getRange('C1').setValue(0); // Reset counter
   quizSheet.getRange('D1').setValue(''); // Clear used questions
-  
+
   // Wait a moment to ensure state is cleared
   Utilities.sleep(100);
-  
+
   // Set category
   quizSheet.getRange('A1').setValue(testCategory);
-  
+
   // Wait a moment after setting category
   Utilities.sleep(100);
-  
+
   // Start quiz
   quizSheet.getRange('B2').setValue(true);
   const startQuizEvent = {
@@ -939,7 +939,7 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
     oldValue: false
   };
   handleCheckboxEdit(startQuizEvent);
-  
+
   // Verify a question was loaded
   const currentQuestion = quizSheet.getRange('A4').getValue();
   if (!currentQuestion || currentQuestion === '') {
@@ -950,7 +950,7 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
     );
     return false;
   }
-  
+
   // Check Show Answer checkbox first
   quizSheet.getRange('B7').setValue(true);
   const showAnswerEvent = {
@@ -960,10 +960,10 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
     oldValue: false
   };
   handleCheckboxEdit(showAnswerEvent);
-  
+
   // Verify answer is displayed
   const answerWhenChecked = quizSheet.getRange('A8').getValue();
-  
+
   // Uncheck Show Answer checkbox
   quizSheet.getRange('B7').setValue(false);
   const hideAnswerEvent = {
@@ -973,22 +973,232 @@ function testShowAnswerHidesAnswerWhenUnchecked() {
     oldValue: true
   };
   handleCheckboxEdit(hideAnswerEvent);
-  
+
   // Get the answer after unchecking
   const answerWhenUnchecked = quizSheet.getRange('A8').getValue();
-  
+
   const testPassed = answerWhenChecked !== '' && answerWhenUnchecked === '';
-  
+
   recordTestResult(
     'testShowAnswerHidesAnswerWhenUnchecked',
     'Show Answer checkbox should hide the answer when unchecked',
     testPassed,
-    testPassed ? 
+    testPassed ?
       '✓ Show Answer checkbox correctly hides the answer when unchecked' :
       `✗ Show Answer hide failed. Answer when checked: "${answerWhenChecked}", Answer when unchecked: "${answerWhenUnchecked}"`
   );
-  
+
   return testPassed;
+}
+// Test that verifies score display labels are correctly initialized
+function testScoreDisplayInitialization() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Run setup to ensure labels are set
+  setupQuizSheet();
+
+  const rightLabel = quizSheet.getRange('A9').getValue();
+  const wrongLabel = quizSheet.getRange('A10').getValue();
+
+  const labelsCorrect = (rightLabel === 'Right Answers:' && wrongLabel === 'Wrong Answers:');
+
+  recordTestResult(
+    'testScoreDisplayInitialization',
+    'Score display labels should be correctly initialized',
+    labelsCorrect,
+    labelsCorrect ?
+      '✓ Labels correctly set: A9="Right Answers:", A10="Wrong Answers:"' :
+      `✗ Labels incorrect: A9="${rightLabel}", A10="${wrongLabel}"`
+  );
+
+  return labelsCorrect;
+}
+
+// Test that verifies score display initial values are 0
+function testScoreDisplayInitialValues() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Run setup to ensure initial values are set
+  setupQuizSheet();
+
+  const rightCount = quizSheet.getRange('B9').getValue();
+  const wrongCount = quizSheet.getRange('B10').getValue();
+
+  const valuesCorrect = (rightCount === 0 && wrongCount === 0);
+
+  recordTestResult(
+    'testScoreDisplayInitialValues',
+    'Score display initial values should be 0',
+    valuesCorrect,
+    valuesCorrect ?
+      '✓ Initial values correct: B9=0, B10=0' :
+      `✗ Initial values incorrect: B9=${rightCount}, B10=${wrongCount}`
+  );
+
+  return valuesCorrect;
+}
+
+// Test score reset when category changes
+function testScoreResetOnCategoryChange() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state with some scores
+  quizSheet.getRange('B9').setValue(5); // Set right count to 5
+  quizSheet.getRange('B10').setValue(3); // Set wrong count to 3
+
+  // Mock category change
+  const mockEvent = {
+    source: ss,
+    range: quizSheet.getRange('A1'),
+    value: 'New Category',
+    oldValue: 'Old Category'
+  };
+
+  handleCheckboxEdit(mockEvent);
+
+  const rightCount = quizSheet.getRange('B9').getValue();
+  const wrongCount = quizSheet.getRange('B10').getValue();
+
+  const scoresReset = (rightCount === 0 && wrongCount === 0);
+
+  recordTestResult(
+    'testScoreResetOnCategoryChange',
+    'Scores should reset to 0 when category changes',
+    scoresReset,
+    scoresReset ?
+      '✓ Both scores reset to 0 after category change' :
+      `✗ Scores not reset: Right=${rightCount}, Wrong=${wrongCount}`
+  );
+
+  return scoresReset;
+}
+
+// Test score reset when quiz starts
+function testScoreResetOnQuizStart() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state with some scores
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B9').setValue(7); // Set right count to 7
+  quizSheet.getRange('B10').setValue(4); // Set wrong count to 4
+
+  // Mock Start Quiz checkbox being checked
+  const mockEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+
+  handleCheckboxEdit(mockEvent);
+
+  const rightCount = quizSheet.getRange('B9').getValue();
+  const wrongCount = quizSheet.getRange('B10').getValue();
+
+  const scoresReset = (rightCount === 0 && wrongCount === 0);
+
+  recordTestResult(
+    'testScoreResetOnQuizStart',
+    'Scores should reset to 0 when quiz starts',
+    scoresReset,
+    scoresReset ?
+      '✓ Both scores reset to 0 when quiz started' :
+      `✗ Scores not reset on quiz start: Right=${rightCount}, Wrong=${wrongCount}`
+  );
+
+  return scoresReset;
+}
+
+// Test score reset when quiz stops
+function testScoreResetOnQuizStop() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state with some scores and active quiz
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(true); // Quiz is active
+  quizSheet.getRange('B9').setValue(6); // Set right count to 6
+  quizSheet.getRange('B10').setValue(2); // Set wrong count to 2
+
+  // Mock Start Quiz checkbox being unchecked (stop quiz)
+  const mockEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: false,
+    oldValue: true
+  };
+
+  handleCheckboxEdit(mockEvent);
+
+  const rightCount = quizSheet.getRange('B9').getValue();
+  const wrongCount = quizSheet.getRange('B10').getValue();
+
+  const scoresReset = (rightCount === 0 && wrongCount === 0);
+
+  recordTestResult(
+    'testScoreResetOnQuizStop',
+    'Scores should reset to 0 when quiz stops',
+    scoresReset,
+    scoresReset ?
+      '✓ Both scores reset to 0 when quiz stopped' :
+      `✗ Scores not reset on quiz stop: Right=${rightCount}, Wrong=${wrongCount}`
+  );
+
+  return scoresReset;
+}
+
+// Test that scores don't increment when quiz is not started
+function testNoIncrementWhenQuizNotStarted() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Setup initial state without starting quiz
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(false); // Quiz not started
+  quizSheet.getRange('B9').setValue(0); // Reset counts
+  quizSheet.getRange('B10').setValue(0);
+
+  // Try to check Right checkbox
+  const rightMockEvent = {
+    source: ss,
+    range: quizSheet.getRange('B5'),
+    value: true,
+    oldValue: false
+  };
+
+  handleCheckboxEdit(rightMockEvent);
+
+  const rightCountAfterRight = quizSheet.getRange('B9').getValue();
+
+  // Try to check Wrong checkbox
+  const wrongMockEvent = {
+    source: ss,
+    range: quizSheet.getRange('B6'),
+    value: true,
+    oldValue: false
+  };
+
+  handleCheckboxEdit(wrongMockEvent);
+
+  const rightCountAfterWrong = quizSheet.getRange('B9').getValue();
+  const wrongCountAfterWrong = quizSheet.getRange('B10').getValue();
+
+  const countsUnchanged = (rightCountAfterRight === 0 && rightCountAfterWrong === 0 && wrongCountAfterWrong === 0);
+
+  recordTestResult(
+    'testNoIncrementWhenQuizNotStarted',
+    'Scores should not increment when quiz is not started',
+    countsUnchanged,
+    countsUnchanged ?
+      '✓ Scores remained at 0 when checkboxes clicked without active quiz' :
+      `✗ Scores incremented without active quiz: Right=${rightCountAfterWrong}, Wrong=${wrongCountAfterWrong}`
+  );
+
+  return countsUnchanged;
 }
 
 /**
@@ -1011,5 +1221,13 @@ function runAllTests() {
   testShowAnswerCheckboxDisabledWhenQuizNotStarted();
   testShowAnswerDisplaysCorrectAnswer();
   testShowAnswerHidesAnswerWhenUnchecked();
+  testScoreDisplayInitialization();
+  testScoreDisplayInitialValues();
+  testScoreResetOnCategoryChange();
+  testScoreResetOnQuizStart();
+  testScoreResetOnQuizStop();
+  testNoIncrementWhenQuizNotStarted();
+
+
 }
 

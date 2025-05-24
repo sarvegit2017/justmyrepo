@@ -28,12 +28,18 @@ function setupQuizSheet() {
   quizSheet.getRange('A7').setValue('Show Answer');
   quizSheet.getRange('B7').insertCheckboxes();
 
-  // === 5. Initially disable Right, Wrong, and Show Answer checkboxes ===
+  // === 5. Add Score Display Section ===
+  quizSheet.getRange('A9').setValue('Right Answers:');
+  quizSheet.getRange('B9').setValue(0);
+  quizSheet.getRange('A10').setValue('Wrong Answers:');
+  quizSheet.getRange('B10').setValue(0);
+
+  // === 6. Initially disable Right, Wrong, and Show Answer checkboxes ===
   quizSheet.getRange('B5').protect().setDescription('Right checkbox - disabled until quiz starts');
   quizSheet.getRange('B6').protect().setDescription('Wrong checkbox - disabled until quiz starts');
   quizSheet.getRange('B7').protect().setDescription('Show Answer checkbox - disabled until quiz starts');
 
-  // === 6. Add onEdit trigger (only if not already set) ===
+  // === 7. Add onEdit trigger (only if not already set) ===
   const triggers = ScriptApp.getProjectTriggers();
   const hasOnEdit = triggers.some(trigger => trigger.getHandlerFunction() === 'handleCheckboxEdit');
 
@@ -124,6 +130,48 @@ function addUsedQuestion(sheet, questionText) {
   }
 }
 
+// === Helper function to get right answers count ===
+function getRightAnswersCount(sheet) {
+  const rightCountCell = sheet.getRange('B9');
+  const count = rightCountCell.getValue();
+  return (typeof count === 'number' && count >= 0) ? count : 0;
+}
+
+// === Helper function to set right answers count ===
+function setRightAnswersCount(sheet, count) {
+  sheet.getRange('B9').setValue(count);
+}
+
+// === Helper function to get wrong answers count ===
+function getWrongAnswersCount(sheet) {
+  const wrongCountCell = sheet.getRange('B10');
+  const count = wrongCountCell.getValue();
+  return (typeof count === 'number' && count >= 0) ? count : 0;
+}
+
+// === Helper function to set wrong answers count ===
+function setWrongAnswersCount(sheet, count) {
+  sheet.getRange('B10').setValue(count);
+}
+
+// === Helper function to increment right answers count ===
+function incrementRightAnswers(sheet) {
+  const currentCount = getRightAnswersCount(sheet);
+  setRightAnswersCount(sheet, currentCount + 1);
+}
+
+// === Helper function to increment wrong answers count ===
+function incrementWrongAnswers(sheet) {
+  const currentCount = getWrongAnswersCount(sheet);
+  setWrongAnswersCount(sheet, currentCount + 1);
+}
+
+// === Helper function to reset answer counts ===
+function resetAnswerCounts(sheet) {
+  setRightAnswersCount(sheet, 0);
+  setWrongAnswersCount(sheet, 0);
+}
+
 // === Helper function to get current question's answer ===
 function getCurrentQuestionAnswer(sheet, spreadsheet) {
   const currentQuestion = sheet.getRange('A4').getValue();
@@ -171,6 +219,7 @@ function handleCheckboxEdit(e) {
     sheet.getRange('B2').setValue(false);  // Uncheck Start Quiz checkbox
     resetQuestionCounter(sheet);           // Reset question counter
     resetUsedQuestions(sheet);             // Reset used questions list
+    resetAnswerCounts(sheet);              // Reset answer counts
     toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong/Show Answer checkboxes
     return;
   }
@@ -188,8 +237,9 @@ function handleCheckboxEdit(e) {
       const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
 
       if (filtered.length > 0) {
-        // Reset used questions when starting a new quiz
+        // Reset used questions and answer counts when starting a new quiz
         resetUsedQuestions(sheet);
+        resetAnswerCounts(sheet);
         
         const usedQuestions = getUsedQuestions(sheet);
         const availableQuestions = filtered.filter(row => !usedQuestions.includes(row[2]));
@@ -226,6 +276,7 @@ function handleCheckboxEdit(e) {
       answerCell.setValue(''); // Clear answer when quiz stops
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
+      resetAnswerCounts(sheet); // Reset answer counts when quiz stops
       // Disable Right/Wrong/Show Answer checkboxes when quiz stops
       toggleRightWrongCheckboxes(sheet, false);
     }
@@ -238,6 +289,8 @@ function handleCheckboxEdit(e) {
     
     // Only proceed if Start Quiz is checked
     if (isChecked && startQuizChecked) {
+      // Increment right answers count
+      incrementRightAnswers(sheet);
       // Uncheck Wrong checkbox
       sheet.getRange('B6').setValue(false);
       // Show next question
@@ -255,6 +308,8 @@ function handleCheckboxEdit(e) {
     
     // Only proceed if Start Quiz is checked
     if (isChecked && startQuizChecked) {
+      // Increment wrong answers count
+      incrementWrongAnswers(sheet);
       // Uncheck Right checkbox
       sheet.getRange('B5').setValue(false);
       // Show next question
