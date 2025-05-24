@@ -702,6 +702,279 @@ function testUsedQuestionsResetOnQuizComplete() {
   return testPassed;
 }
 
+// Test that Show Answer checkbox is disabled when quiz is not started
+function testShowAnswerCheckboxDisabledWhenQuizNotStarted() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  
+  // Reset quiz state
+  quizSheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+  quizSheet.getRange('B7').setValue(false); // Uncheck Show Answer
+  quizSheet.getRange('A4').setValue(''); // Clear question
+  quizSheet.getRange('A8').setValue(''); // Clear answer
+  
+  // Trigger the edit event to disable checkboxes
+  const stopQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: false,
+    oldValue: true
+  };
+  handleCheckboxEdit(stopQuizEvent);
+  
+  // Check if Show Answer checkbox is protected (disabled)
+  const isShowAnswerProtected = isRangeProtected(quizSheet, 'B7');
+  
+  recordTestResult(
+    'Show Answer checkbox should be disabled when quiz is not started',
+    isShowAnswerProtected,
+    isShowAnswerProtected ? 
+      '✓ Show Answer checkbox is properly disabled when quiz is not started' :
+      '✗ Show Answer checkbox is not disabled when quiz is not started'
+  );
+  
+  return isShowAnswerProtected;
+}
+
+// Test that Show Answer checkbox shows the correct answer when checked
+function testShowAnswerDisplaysCorrectAnswer() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get datastore data and find a valid category with questions
+  const data = datastoreSheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    recordTestResult(
+      'Show Answer checkbox should display the correct answer when checked',
+      false,
+      '✗ No data found in datastore sheet'
+    );
+    return false;
+  }
+  
+  // Find a category that actually has questions
+  let testCategory = null;
+  let testQuestionRow = null;
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (row[1] && row[2] && row[3]) { // Category, Question, and Answer all exist
+      testCategory = row[1];
+      testQuestionRow = row;
+      break;
+    }
+  }
+  
+  if (!testCategory || !testQuestionRow) {
+    recordTestResult(
+      'Show Answer checkbox should display the correct answer when checked',
+      false,
+      '✗ No valid category with question and answer found in datastore'
+    );
+    return false;
+  }
+  
+  // Clear any existing state completely
+  quizSheet.getRange('A1').setValue(''); // Clear category first
+  quizSheet.getRange('B2').setValue(false);
+  quizSheet.getRange('B7').setValue(false);
+  quizSheet.getRange('A4').setValue(''); // Clear question cell
+  quizSheet.getRange('A8').setValue(''); // Clear answer cell
+  quizSheet.getRange('C1').setValue(0); // Reset counter
+  quizSheet.getRange('D1').setValue(''); // Clear used questions
+  
+  // Wait a moment to ensure state is cleared
+  Utilities.sleep(100);
+  
+  // Set category
+  quizSheet.getRange('A1').setValue(testCategory);
+  
+  // Wait a moment after setting category
+  Utilities.sleep(100);
+  
+  // Start quiz by setting checkbox to true
+  quizSheet.getRange('B2').setValue(true);
+  
+  // Trigger the edit event manually
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  // Get the current question after quiz starts
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  
+  // Debugging: Check if question was loaded
+  if (!currentQuestion || currentQuestion === '') {
+    // Try to debug by checking what's in the datastore for this category
+    const categoryData = data.filter((row, index) => index !== 0 && row[1] === testCategory);
+    
+    recordTestResult(
+      'Show Answer checkbox should display the correct answer when checked',
+      false,
+      `✗ No question loaded after starting quiz. Category: "${testCategory}", Questions in category: ${categoryData.length}, First question in category: "${categoryData.length > 0 ? categoryData[0][2] : 'none'}"`
+    );
+    return false;
+  }
+  
+  // Find the expected answer from datastore for the current question
+  let expectedAnswer = '';
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (row[1] === testCategory && row[2] === currentQuestion) {
+      expectedAnswer = row[3] || '';
+      break;
+    }
+  }
+  
+  // Check Show Answer checkbox
+  quizSheet.getRange('B7').setValue(true);
+  const showAnswerEvent = {
+    source: ss,
+    range: quizSheet.getRange('B7'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(showAnswerEvent);
+  
+  // Get the displayed answer
+  const displayedAnswer = quizSheet.getRange('A8').getValue();
+  
+  // Test passes if answer is displayed and matches expected answer
+  const testPassed = displayedAnswer !== '' && displayedAnswer === expectedAnswer;
+  
+  recordTestResult(
+    'Show Answer checkbox should display the correct answer when checked',
+    testPassed,
+    testPassed ? 
+      '✓ Show Answer checkbox correctly displays the answer' :
+      `✗ Show Answer failed. Question: "${currentQuestion}", Expected: "${expectedAnswer}", Got: "${displayedAnswer}"`
+  );
+  
+  return testPassed;
+}
+
+// Test that Show Answer checkbox hides the answer when unchecked
+function testShowAnswerHidesAnswerWhenUnchecked() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const datastoreSheet = ss.getSheetByName('datastore');
+  
+  // Get datastore data and find a valid category with questions
+  const data = datastoreSheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    recordTestResult(
+      'Show Answer checkbox should hide the answer when unchecked',
+      false,
+      '✗ No data found in datastore sheet'
+    );
+    return false;
+  }
+  
+  // Find a category that actually has questions
+  let testCategory = null;
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (row[1] && row[2] && row[3]) { // Category, Question, and Answer all exist
+      testCategory = row[1];
+      break;
+    }
+  }
+  
+  if (!testCategory) {
+    recordTestResult(
+      'Show Answer checkbox should hide the answer when unchecked',
+      false,
+      '✗ No valid category with question and answer found in datastore'
+    );
+    return false;
+  }
+  
+  // Clear any existing state completely
+  quizSheet.getRange('A1').setValue(''); // Clear category first  
+  quizSheet.getRange('B2').setValue(false);
+  quizSheet.getRange('B7').setValue(false);
+  quizSheet.getRange('A4').setValue(''); // Clear question cell
+  quizSheet.getRange('A8').setValue(''); // Clear answer cell
+  quizSheet.getRange('C1').setValue(0); // Reset counter
+  quizSheet.getRange('D1').setValue(''); // Clear used questions
+  
+  // Wait a moment to ensure state is cleared
+  Utilities.sleep(100);
+  
+  // Set category
+  quizSheet.getRange('A1').setValue(testCategory);
+  
+  // Wait a moment after setting category
+  Utilities.sleep(100);
+  
+  // Start quiz
+  quizSheet.getRange('B2').setValue(true);
+  const startQuizEvent = {
+    source: ss,
+    range: quizSheet.getRange('B2'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(startQuizEvent);
+  
+  // Verify a question was loaded
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  if (!currentQuestion || currentQuestion === '') {
+    recordTestResult(
+      'Show Answer checkbox should hide the answer when unchecked',
+      false,
+      `✗ No question loaded after starting quiz with category: "${testCategory}"`
+    );
+    return false;
+  }
+  
+  // Check Show Answer checkbox first
+  quizSheet.getRange('B7').setValue(true);
+  const showAnswerEvent = {
+    source: ss,
+    range: quizSheet.getRange('B7'),
+    value: true,
+    oldValue: false
+  };
+  handleCheckboxEdit(showAnswerEvent);
+  
+  // Verify answer is displayed
+  const answerWhenChecked = quizSheet.getRange('A8').getValue();
+  
+  // Uncheck Show Answer checkbox
+  quizSheet.getRange('B7').setValue(false);
+  const hideAnswerEvent = {
+    source: ss,
+    range: quizSheet.getRange('B7'),
+    value: false,
+    oldValue: true
+  };
+  handleCheckboxEdit(hideAnswerEvent);
+  
+  // Get the answer after unchecking
+  const answerWhenUnchecked = quizSheet.getRange('A8').getValue();
+  
+  const testPassed = answerWhenChecked !== '' && answerWhenUnchecked === '';
+  
+  recordTestResult(
+    'Show Answer checkbox should hide the answer when unchecked',
+    testPassed,
+    testPassed ? 
+      '✓ Show Answer checkbox correctly hides the answer when unchecked' :
+      `✗ Show Answer hide failed. Answer when checked: "${answerWhenChecked}", Answer when unchecked: "${answerWhenUnchecked}"`
+  );
+  
+  return testPassed;
+}
 
 /**
  * Run all unit tests and record results in the test results sheet
@@ -720,5 +993,8 @@ function runAllTests() {
   testUsedQuestionsTracking();
   testUsedQuestionsResetOnCategoryChange();
   testUsedQuestionsResetOnQuizComplete();
+  testShowAnswerCheckboxDisabledWhenQuizNotStarted();
+  testShowAnswerDisplaysCorrectAnswer();
+  testShowAnswerHidesAnswerWhenUnchecked();
 }
 
