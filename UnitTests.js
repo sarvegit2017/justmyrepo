@@ -1420,7 +1420,7 @@ function testScorePreservationDuringQuizProgress() {
   // Simulate answering correctly (this would typically trigger next question)
   const checkboxRange = quizSheet.getRange('B5');
   checkboxRange.setValue(true); // Set the checkbox value first
-  
+
   const mockEvent = {
     source: ss,
     range: checkboxRange,
@@ -1478,7 +1478,7 @@ function testMixedAnswers() {
   sequence.forEach((step, index) => {
     const checkboxRange = quizSheet.getRange(step.checkbox);
     checkboxRange.setValue(true); // Set the checkbox value first
-    
+
     const mockEvent = {
       source: ss,
       range: checkboxRange,
@@ -1512,13 +1512,487 @@ function testMixedAnswers() {
 
   return allCorrect;
 }
+
+// 1. Basic Retry Mode Activation Tests
+function testRetryModeStopsRunningQuiz() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Start a quiz first
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const questionBefore = quizSheet.getRange('A4').getValue();
+  const quizRunning = quizSheet.getRange('B2').getValue();
+
+  // Now check Retry Wrong Questions
+  quizSheet.getRange('B3').setValue(true);
+  const retryEvent = createMockEditEvent(ss, quizSheet.getRange('B3'), true, false);
+  handleCheckboxEdit(retryEvent);
+
+  const questionAfter = quizSheet.getRange('A4').getValue();
+  const quizStoppedAfter = quizSheet.getRange('B2').getValue();
+
+  const passed = (questionBefore !== '' && quizRunning === true && questionAfter === '' && quizStoppedAfter === false);
+
+  recordTestResult(
+    'testRetryModeStopsRunningQuiz',
+    'Checking Retry Wrong Questions should stop running quiz',
+    passed,
+    `Before: Quiz running=${quizRunning}, Question="${questionBefore}". After: Quiz running=${quizStoppedAfter}, Question="${questionAfter}"`
+  );
+
+  return passed;
+}
+
+function testRetryModeToggleWhenQuizNotRunning() {
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Check retry checkbox when quiz is not running
+  quizSheet.getRange('B3').setValue(true);
+  const checkEvent = createMockEditEvent(ss, quizSheet.getRange('B3'), true, false);
+  handleCheckboxEdit(checkEvent);
+
+  const checkedState = quizSheet.getRange('B3').getValue();
+
+  // Uncheck retry checkbox
+  quizSheet.getRange('B3').setValue(false);
+  const uncheckEvent = createMockEditEvent(ss, quizSheet.getRange('B3'), false, true);
+  handleCheckboxEdit(uncheckEvent);
+
+  const uncheckedState = quizSheet.getRange('B3').getValue();
+
+  const passed = (checkedState === true && uncheckedState === false);
+
+  recordTestResult(
+    'testRetryModeToggleWhenQuizNotRunning',
+    'Retry Wrong Questions should be toggleable when quiz is not running',
+    passed,
+    `Checked state: ${checkedState}, Unchecked state: ${uncheckedState}`
+  );
+
+  return passed;
+}
+
+// 2. Wrong Questions Collection Tests
+function testWrongAnswerAddsToList() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Start quiz
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  const wrongQuestionsBefore = getWrongQuestions(quizSheet);
+
+  // Answer wrong
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B6').setValue(true);
+  const wrongEvent = createMockEditEvent(ss, quizSheet.getRange('B6'), true, false);
+  handleCheckboxEdit(wrongEvent);
+
+  const wrongQuestionsAfter = getWrongQuestions(quizSheet);
+
+  const passed = (wrongQuestionsBefore.length === 0 &&
+    wrongQuestionsAfter.length === 1 &&
+    wrongQuestionsAfter.includes(currentQuestion));
+
+  recordTestResult(
+    'testWrongAnswerAddsToList',
+    'Answering wrong should add question to wrong questions list',
+    passed,
+    `Question: "${currentQuestion}". Before: ${wrongQuestionsBefore.length} questions. After: ${wrongQuestionsAfter.length} questions. Contains question: ${wrongQuestionsAfter.includes(currentQuestion)}`
+  );
+
+  return passed;
+}
+
+function testRightAnswerDoesNotAddToList() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Start quiz
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  const wrongQuestionsBefore = getWrongQuestions(quizSheet);
+
+  // Answer right
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B5').setValue(true);
+  const rightEvent = createMockEditEvent(ss, quizSheet.getRange('B5'), true, false);
+  handleCheckboxEdit(rightEvent);
+
+  const wrongQuestionsAfter = getWrongQuestions(quizSheet);
+
+  const passed = (wrongQuestionsBefore.length === 0 &&
+    wrongQuestionsAfter.length === 0);
+
+  recordTestResult(
+    'testRightAnswerDoesNotAddToList',
+    'Answering right should not add question to wrong questions list',
+    passed,
+    `Question: "${currentQuestion}". Before: ${wrongQuestionsBefore.length} questions. After: ${wrongQuestionsAfter.length} questions.`
+  );
+
+  return passed;
+}
+
+function testNoDuplicateWrongQuestions() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  const testQuestion = "Test Question";
+
+  // Manually set a question and add it to wrong questions multiple times
+  quizSheet.getRange('A4').setValue(testQuestion);
+
+  addWrongQuestion(quizSheet, testQuestion);
+  addWrongQuestion(quizSheet, testQuestion);
+  addWrongQuestion(quizSheet, testQuestion);
+
+  const wrongQuestions = getWrongQuestions(quizSheet);
+  const uniqueCount = [...new Set(wrongQuestions)].length;
+
+  const passed = (wrongQuestions.length === 1 && uniqueCount === 1);
+
+  recordTestResult(
+    'testNoDuplicateWrongQuestions',
+    'Same wrong question should not be added multiple times',
+    passed,
+    `Added same question 3 times. List length: ${wrongQuestions.length}, Unique count: ${uniqueCount}`
+  );
+
+  return passed;
+}
+
+// 3. Retry Mode Question Selection Tests
+function testRetryModeShowsOnlyWrongQuestions() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Manually add some wrong questions
+  setWrongQuestions(quizSheet, ['Question 1', 'Question 3']);
+
+  // Check retry mode and start quiz
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  const wrongQuestions = getWrongQuestions(quizSheet);
+
+  const passed = wrongQuestions.includes(currentQuestion);
+
+  recordTestResult(
+    'testRetryModeShowsOnlyWrongQuestions',
+    'Retry mode should only show questions from wrong questions list',
+    passed,
+    `Current question: "${currentQuestion}". Wrong questions list: [${wrongQuestions.join(', ')}]. Question in list: ${passed}`
+  );
+
+  return passed;
+}
+
+function testRetryModeEmptyListMessage() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Ensure wrong questions list is empty
+  resetWrongQuestions(quizSheet);
+
+  // Check retry mode and start quiz
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  const expectedMessage = "No wrong questions available to retry for this category.";
+
+  const passed = (currentQuestion === expectedMessage);
+
+  recordTestResult(
+    'testRetryModeEmptyListMessage',
+    'Retry mode with empty wrong questions list should show appropriate message',
+    passed,
+    `Expected: "${expectedMessage}". Got: "${currentQuestion}"`
+  );
+
+  return passed;
+}
+
+// 4. Right Answer in Retry Mode Tests
+function testRightAnswerInRetryModeRemovesFromList() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Set up wrong questions list
+  setWrongQuestions(quizSheet, ['Question 1', 'Question 2', 'Question 3']);
+
+  // Start retry mode
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  const wrongQuestionsBefore = getWrongQuestions(quizSheet);
+
+  // Answer right
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B5').setValue(true);
+  const rightEvent = createMockEditEvent(ss, quizSheet.getRange('B5'), true, false);
+  handleCheckboxEdit(rightEvent);
+
+  const wrongQuestionsAfter = getWrongQuestions(quizSheet);
+
+  const passed = (wrongQuestionsBefore.includes(currentQuestion) &&
+    !wrongQuestionsAfter.includes(currentQuestion) &&
+    wrongQuestionsAfter.length === wrongQuestionsBefore.length - 1);
+
+  recordTestResult(
+    'testRightAnswerInRetryModeRemovesFromList',
+    'Right answer in retry mode should remove question from wrong questions list',
+    passed,
+    `Question: "${currentQuestion}". Before: ${wrongQuestionsBefore.length} questions. After: ${wrongQuestionsAfter.length} questions. Removed: ${!wrongQuestionsAfter.includes(currentQuestion)}`
+  );
+
+  return passed;
+}
+
+function testRightAnswerInRetryModeIncrementsCounter() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Set up wrong questions list
+  setWrongQuestions(quizSheet, ['Question 1', 'Question 2']);
+
+  // Start retry mode
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const rightCountBefore = getRightAnswersCount(quizSheet);
+
+  // Answer right
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B5').setValue(true);
+  const rightEvent = createMockEditEvent(ss, quizSheet.getRange('B5'), true, false);
+  handleCheckboxEdit(rightEvent);
+
+  const rightCountAfter = getRightAnswersCount(quizSheet);
+
+  const passed = (rightCountAfter === rightCountBefore + 1);
+
+  recordTestResult(
+    'testRightAnswerInRetryModeIncrementsCounter',
+    'Right answer in retry mode should increment right answer counter',
+    passed,
+    `Right count before: ${rightCountBefore}. Right count after: ${rightCountAfter}`
+  );
+
+  return passed;
+}
+
+// 5. Wrong Answer in Retry Mode Tests
+function testWrongAnswerInRetryModeKeepsInList() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Set up wrong questions list
+  setWrongQuestions(quizSheet, ['Question 1', 'Question 2']);
+
+  // Start retry mode
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const currentQuestion = quizSheet.getRange('A4').getValue();
+  const wrongQuestionsBefore = getWrongQuestions(quizSheet);
+
+  // Answer wrong
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B6').setValue(true);
+  const wrongEvent = createMockEditEvent(ss, quizSheet.getRange('B6'), true, false);
+  handleCheckboxEdit(wrongEvent);
+
+  const wrongQuestionsAfter = getWrongQuestions(quizSheet);
+
+  const passed = (wrongQuestionsBefore.includes(currentQuestion) &&
+    wrongQuestionsAfter.includes(currentQuestion) &&
+    wrongQuestionsAfter.length === wrongQuestionsBefore.length);
+
+  recordTestResult(
+    'testWrongAnswerInRetryModeKeepsInList',
+    'Wrong answer in retry mode should keep question in wrong questions list',
+    passed,
+    `Question: "${currentQuestion}". Before: ${wrongQuestionsBefore.length} questions. After: ${wrongQuestionsAfter.length} questions. Still in list: ${wrongQuestionsAfter.includes(currentQuestion)}`
+  );
+
+  return passed;
+}
+
+function testWrongAnswerInRetryModeIncrementsCounter() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Set up wrong questions list
+  setWrongQuestions(quizSheet, ['Question 1', 'Question 2']);
+
+  // Start retry mode
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const wrongCountBefore = getWrongAnswersCount(quizSheet);
+
+  // Answer wrong
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B6').setValue(true);
+  const wrongEvent = createMockEditEvent(ss, quizSheet.getRange('B6'), true, false);
+  handleCheckboxEdit(wrongEvent);
+
+  const wrongCountAfter = getWrongAnswersCount(quizSheet);
+
+  const passed = (wrongCountAfter === wrongCountBefore + 1);
+
+  recordTestResult(
+    'testWrongAnswerInRetryModeIncrementsCounter',
+    'Wrong answer in retry mode should increment wrong answer counter',
+    passed,
+    `Wrong count before: ${wrongCountBefore}. Wrong count after: ${wrongCountAfter}`
+  );
+
+  return passed;
+}
+
+// 6. Retry Mode Completion Tests
+function testRetryModeCompletionMessage() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Set up wrong questions list with only one question
+  setWrongQuestions(quizSheet, ['Question 1']);
+
+  // Start retry mode
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  // Answer the question right (should remove it from wrong questions list)
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B5').setValue(true);
+  const rightEvent = createMockEditEvent(ss, quizSheet.getRange('B5'), true, false);
+  handleCheckboxEdit(rightEvent);
+
+  const finalQuestion = quizSheet.getRange('A4').getValue();
+  const expectedMessage = "Quiz Complete! All wrong questions have been answered correctly.";
+  const quizStopped = !quizSheet.getRange('B2').getValue();
+
+  const passed = (finalQuestion === expectedMessage && quizStopped);
+
+  recordTestResult(
+    'testRetryModeCompletionMessage',
+    'Retry mode should show completion message when all wrong questions answered correctly',
+    passed,
+    `Expected: "${expectedMessage}". Got: "${finalQuestion}". Quiz stopped: ${quizStopped}`
+  );
+
+  return passed;
+}
+
+function testRetryModeCompletionStopsQuiz() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Set up wrong questions list with only one question
+  setWrongQuestions(quizSheet, ['Question 1']);
+
+  // Start retry mode
+  quizSheet.getRange('B3').setValue(true);
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const quizRunningBefore = quizSheet.getRange('B2').getValue();
+
+  // Answer the question right (should complete the quiz)
+  toggleRightWrongCheckboxes(quizSheet, true);
+  quizSheet.getRange('B5').setValue(true);
+  const rightEvent = createMockEditEvent(ss, quizSheet.getRange('B5'), true, false);
+  handleCheckboxEdit(rightEvent);
+
+  const quizRunningAfter = quizSheet.getRange('B2').getValue();
+  const checkboxesDisabled = isRangeProtected(quizSheet, 'B5') && isRangeProtected(quizSheet, 'B6');
+
+  const passed = (quizRunningBefore === true && quizRunningAfter === false && checkboxesDisabled);
+
+  recordTestResult(
+    'testRetryModeCompletionStopsQuiz',
+    'Retry mode completion should stop quiz and disable checkboxes',
+    passed,
+    `Quiz before: ${quizRunningBefore}. Quiz after: ${quizRunningAfter}. Checkboxes disabled: ${checkboxesDisabled}`
+  );
+
+  return passed;
+}
 /**
  * Run all unit tests and record results in the test results sheet
  */
 function runAllTests() {
   clearTestResults();
 
-  /*testCategoryClearsQuestionCell();
+  testCategoryClearsQuestionCell();
   testCategoryClearsCheckbox();
   testRightWrongCheckboxesDisabledWhenQuizNotStarted();
   testRightWrongCheckboxesEnabledWhenQuizStarted();
@@ -1542,9 +2016,22 @@ function runAllTests() {
   testWrongAnswerIncrement();
   testMultipleRightAnswers();
   testMultipleWrongAnswers();
-  testScorePreservationDuringQuizProgress();*/
+  testScorePreservationDuringQuizProgress();
   testMixedAnswers();
-  
+  /*testRetryModeStopsRunningQuiz();
+  testRetryModeToggleWhenQuizNotRunning();
+  testWrongAnswerAddsToList();
+  testRightAnswerDoesNotAddToList();
+  testNoDuplicateWrongQuestions();
+  testRetryModeShowsOnlyWrongQuestions();
+  testRetryModeEmptyListMessage();
+  testRightAnswerInRetryModeRemovesFromList();
+  testRightAnswerInRetryModeIncrementsCounter();
+  testWrongAnswerInRetryModeKeepsInList();
+  testWrongAnswerInRetryModeIncrementsCounter();
+  testRetryModeCompletionMessage();
+  testRetryModeCompletionStopsQuiz();
+  testWrongQuestionsResetInNormalMode();*/
 
 
 }
