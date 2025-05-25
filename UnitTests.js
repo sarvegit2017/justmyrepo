@@ -1541,8 +1541,8 @@ function runAllTests() {
   testRightAnswerIncrement();
   testWrongAnswerIncrement();
   testMultipleRightAnswers();
-  testMultipleWrongAnswers();*/
-  testScorePreservationDuringQuizProgress();
+  testMultipleWrongAnswers();
+  testScorePreservationDuringQuizProgress();*/
   testMixedAnswers();
   
 

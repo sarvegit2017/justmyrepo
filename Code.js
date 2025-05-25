@@ -28,18 +28,23 @@ function setupQuizSheet() {
   quizSheet.getRange('A7').setValue('Show Answer');
   quizSheet.getRange('B7').insertCheckboxes();
 
-  // === 5. Add Score Display Section ===
+  // === 5. Add Retry Wrong Questions checkbox ===
+  quizSheet.getRange('A3').setValue('Retry Wrong Questions');
+  quizSheet.getRange('B3').insertCheckboxes();
+
+  // === 6. Add Score Display Section ===
   quizSheet.getRange('A9').setValue('Right Answers:');
   quizSheet.getRange('B9').setValue(0);
   quizSheet.getRange('A10').setValue('Wrong Answers:');
   quizSheet.getRange('B10').setValue(0);
 
-  // === 6. Initially disable Right, Wrong, and Show Answer checkboxes ===
+  // === 7. Initially disable Right, Wrong, Show Answer, and Retry Wrong Questions checkboxes ===
   quizSheet.getRange('B5').protect().setDescription('Right checkbox - disabled until quiz starts');
   quizSheet.getRange('B6').protect().setDescription('Wrong checkbox - disabled until quiz starts');
   quizSheet.getRange('B7').protect().setDescription('Show Answer checkbox - disabled until quiz starts');
+  quizSheet.getRange('B3').protect().setDescription('Retry Wrong Questions checkbox - disabled until quiz starts');
 
-  // === 7. Add onEdit trigger (only if not already set) ===
+  // === 8. Add onEdit trigger (only if not already set) ===
   const triggers = ScriptApp.getProjectTriggers();
   const hasOnEdit = triggers.some(trigger => trigger.getHandlerFunction() === 'handleCheckboxEdit');
 
@@ -51,18 +56,19 @@ function setupQuizSheet() {
   }
 }
 
-// === Helper function to enable/disable Right, Wrong, and Show Answer checkboxes ===
+// === Helper function to enable/disable Right, Wrong, Show Answer, and Retry Wrong Questions checkboxes ===
 function toggleRightWrongCheckboxes(sheet, enable) {
   const rightCheckbox = sheet.getRange('B5');
   const wrongCheckbox = sheet.getRange('B6');
   const showAnswerCheckbox = sheet.getRange('B7');
+  const retryWrongCheckbox = sheet.getRange('B3');
   
   if (enable) {
     // Remove protection to enable checkboxes
     const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
     protections.forEach(protection => {
       const range = protection.getRange();
-      if (range.getA1Notation() === 'B5' || range.getA1Notation() === 'B6' || range.getA1Notation() === 'B7') {
+      if (range.getA1Notation() === 'B5' || range.getA1Notation() === 'B6' || range.getA1Notation() === 'B7' || range.getA1Notation() === 'B3') {
         protection.remove();
       }
     });
@@ -72,10 +78,12 @@ function toggleRightWrongCheckboxes(sheet, enable) {
     rightCheckbox.protect().setDescription('Right checkbox - disabled until quiz starts');
     wrongCheckbox.protect().setDescription('Wrong checkbox - disabled until quiz starts');
     showAnswerCheckbox.protect().setDescription('Show Answer checkbox - disabled until quiz starts');
+    retryWrongCheckbox.protect().setDescription('Retry Wrong Questions checkbox - disabled until quiz starts');
     // Clear checkbox values when disabling
     rightCheckbox.setValue(false);
     wrongCheckbox.setValue(false);
     showAnswerCheckbox.setValue(false);
+    retryWrongCheckbox.setValue(false);
   }
 }
 
@@ -127,6 +135,40 @@ function addUsedQuestion(sheet, questionText) {
   if (!usedQuestions.includes(questionText)) {
     usedQuestions.push(questionText);
     setUsedQuestions(sheet, usedQuestions);
+  }
+}
+
+// === Helper function to get wrong questions list ===
+function getWrongQuestions(sheet) {
+  const wrongQuestionsCell = sheet.getRange('E1');
+  const wrongQuestionsStr = wrongQuestionsCell.getValue();
+  if (!wrongQuestionsStr || wrongQuestionsStr === '') {
+    return [];
+  }
+  try {
+    return JSON.parse(wrongQuestionsStr);
+  } catch (e) {
+    return [];
+  }
+}
+
+// === Helper function to set wrong questions list ===
+function setWrongQuestions(sheet, wrongQuestions) {
+  const wrongQuestionsCell = sheet.getRange('E1');
+  wrongQuestionsCell.setValue(JSON.stringify(wrongQuestions));
+}
+
+// === Helper function to reset wrong questions list ===
+function resetWrongQuestions(sheet) {
+  setWrongQuestions(sheet, []);
+}
+
+// === Helper function to add a question to wrong questions list ===
+function addWrongQuestion(sheet, questionText) {
+  const wrongQuestions = getWrongQuestions(sheet);
+  if (!wrongQuestions.includes(questionText)) {
+    wrongQuestions.push(questionText);
+    setWrongQuestions(sheet, wrongQuestions);
   }
 }
 
@@ -219,8 +261,9 @@ function handleCheckboxEdit(e) {
     sheet.getRange('B2').setValue(false);  // Uncheck Start Quiz checkbox
     resetQuestionCounter(sheet);           // Reset question counter
     resetUsedQuestions(sheet);             // Reset used questions list
+    resetWrongQuestions(sheet);            // Reset wrong questions list
     resetAnswerCounts(sheet);              // Reset answer counts
-    toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong/Show Answer checkboxes
+    toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong/Show Answer/Retry Wrong Questions checkboxes
     return;
   }
 
@@ -230,6 +273,7 @@ function handleCheckboxEdit(e) {
     const category = sheet.getRange('A1').getValue();
     const questionCell = sheet.getRange('A4');
     const answerCell = sheet.getRange('A8');
+    const retryWrongChecked = sheet.getRange('B3').getValue();
 
     if (isChecked && category) {
       const datastore = e.source.getSheetByName('datastore');
@@ -237,12 +281,33 @@ function handleCheckboxEdit(e) {
       const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
 
       if (filtered.length > 0) {
-        // Reset used questions and answer counts when starting a new quiz
+        let questionsToUse = [];
+        
+        if (retryWrongChecked) {
+          // Get wrong questions for retry mode
+          const wrongQuestions = getWrongQuestions(sheet);
+          questionsToUse = filtered.filter(row => wrongQuestions.includes(row[2]));
+          
+          if (questionsToUse.length === 0) {
+            questionCell.setValue("No wrong questions available to retry for this category.");
+            resetQuestionCounter(sheet);
+            toggleRightWrongCheckboxes(sheet, false);
+            return;
+          }
+          
+          // In retry mode, don't reset wrong questions - we want to keep the list
+        } else {
+          // Normal mode - reset wrong questions list when starting a new quiz
+          resetWrongQuestions(sheet);
+          questionsToUse = filtered;
+        }
+        
+        // Reset used questions and answer counts when starting a quiz
         resetUsedQuestions(sheet);
         resetAnswerCounts(sheet);
         
         const usedQuestions = getUsedQuestions(sheet);
-        const availableQuestions = filtered.filter(row => !usedQuestions.includes(row[2]));
+        const availableQuestions = questionsToUse.filter(row => !usedQuestions.includes(row[2]));
         
         if (availableQuestions.length > 0) {
           const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
@@ -258,17 +323,19 @@ function handleCheckboxEdit(e) {
             toggleAnswer(sheet, e.source, true);
           }
         } else {
-          questionCell.setValue("No more questions available for this category.");
+          if (retryWrongChecked) {
+            questionCell.setValue("No more wrong questions available to retry for this category.");
+          } else {
+            questionCell.setValue("No more questions available for this category.");
+          }
           resetQuestionCounter(sheet);
           resetUsedQuestions(sheet);
-          // Disable checkboxes if no questions available
           toggleRightWrongCheckboxes(sheet, false);
         }
       } else {
         questionCell.setValue("No questions available for this category.");
         resetQuestionCounter(sheet);
         resetUsedQuestions(sheet);
-        // Disable checkboxes if no questions available
         toggleRightWrongCheckboxes(sheet, false);
       }
     } else {
@@ -277,9 +344,27 @@ function handleCheckboxEdit(e) {
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
       resetAnswerCounts(sheet); // Reset answer counts when quiz stops
-      // Disable Right/Wrong/Show Answer checkboxes when quiz stops
+      // Disable Right/Wrong/Show Answer/Retry Wrong Questions checkboxes when quiz stops
       toggleRightWrongCheckboxes(sheet, false);
     }
+  }
+
+  // === If Retry Wrong Questions checkbox in B3 is checked/unchecked ===
+  if (sheet.getName() === 'quiz' && cell === 'B3') {
+    const isChecked = range.getValue();
+    const startQuizChecked = sheet.getRange('B2').getValue();
+    
+    // If Start Quiz is running, stop it and clear the question
+    if (startQuizChecked) {
+      sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+      sheet.getRange('A4').setValue(''); // Clear question
+      sheet.getRange('A8').setValue(''); // Clear answer
+      resetQuestionCounter(sheet);
+      resetUsedQuestions(sheet);
+      resetAnswerCounts(sheet);
+      toggleRightWrongCheckboxes(sheet, false);
+    }
+    // Allow the checkbox to stay checked/unchecked as per user's selection
   }
 
   // === If Right checkbox in B5 is checked ===
@@ -289,6 +374,15 @@ function handleCheckboxEdit(e) {
     
     // Only proceed if Start Quiz is checked
     if (isChecked && startQuizChecked) {
+      // If in retry mode, remove current question from wrong questions list
+      const retryWrongChecked = sheet.getRange('B3').getValue();
+      if (retryWrongChecked) {
+        const currentQuestion = sheet.getRange('A4').getValue();
+        if (currentQuestion && currentQuestion !== '') {
+          removeFromWrongQuestions(sheet, currentQuestion);
+        }
+      }
+      
       // Increment right answers count
       incrementRightAnswers(sheet);
       // Uncheck Wrong checkbox
@@ -308,6 +402,12 @@ function handleCheckboxEdit(e) {
     
     // Only proceed if Start Quiz is checked
     if (isChecked && startQuizChecked) {
+      // Add current question to wrong questions list
+      const currentQuestion = sheet.getRange('A4').getValue();
+      if (currentQuestion && currentQuestion !== '') {
+        addWrongQuestion(sheet, currentQuestion);
+      }
+      
       // Increment wrong answers count
       incrementWrongAnswers(sheet);
       // Uncheck Right checkbox
@@ -336,25 +436,21 @@ function handleCheckboxEdit(e) {
   }
 }
 
+// === Helper function to remove question from wrong questions list ===
+function removeFromWrongQuestions(sheet, questionText) {
+  const wrongQuestions = getWrongQuestions(sheet);
+  const updatedWrongQuestions = wrongQuestions.filter(q => q !== questionText);
+  setWrongQuestions(sheet, updatedWrongQuestions);
+}
+
 // === Helper function to show next random question ===
 function showNextQuestion(sheet, spreadsheet) {
   const category = sheet.getRange('A1').getValue();
   const questionCell = sheet.getRange('A4');
   const answerCell = sheet.getRange('A8');
   const showAnswerCheckbox = sheet.getRange('B7');
+  const retryWrongChecked = sheet.getRange('B3').getValue();
   const currentCount = getQuestionCounter(sheet);
-
-  // Check if we've reached 5 questions
-  if (currentCount >= 5) {
-    questionCell.setValue("Quiz Complete! You have answered 5 questions.");
-    answerCell.setValue(''); // Clear answer when quiz completes
-    // Disable checkboxes and stop quiz
-    toggleRightWrongCheckboxes(sheet, false);
-    sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
-    resetQuestionCounter(sheet);
-    resetUsedQuestions(sheet); // Reset used questions when quiz completes
-    return;
-  }
 
   if (category) {
     const datastore = spreadsheet.getSheetByName('datastore');
@@ -362,8 +458,41 @@ function showNextQuestion(sheet, spreadsheet) {
     const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
 
     if (filtered.length > 0) {
+      let questionsToUse = [];
+      
+      if (retryWrongChecked) {
+        // Get wrong questions for retry mode
+        const wrongQuestions = getWrongQuestions(sheet);
+        questionsToUse = filtered.filter(row => wrongQuestions.includes(row[2]));
+        
+        // In retry mode, check if all wrong questions have been completed
+        if (questionsToUse.length === 0) {
+          questionCell.setValue("Quiz Complete! All wrong questions have been answered correctly.");
+          answerCell.setValue(''); // Clear answer when quiz completes
+          // Disable checkboxes and stop quiz
+          toggleRightWrongCheckboxes(sheet, false);
+          sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+          resetQuestionCounter(sheet);
+          resetUsedQuestions(sheet);
+          return;
+        }
+      } else {
+        // Normal mode - check if we've reached 5 questions
+        if (currentCount >= 5) {
+          questionCell.setValue("Quiz Complete! You have answered 5 questions.");
+          answerCell.setValue(''); // Clear answer when quiz completes
+          // Disable checkboxes and stop quiz
+          toggleRightWrongCheckboxes(sheet, false);
+          sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+          resetQuestionCounter(sheet);
+          resetUsedQuestions(sheet); // Reset used questions when quiz completes
+          return;
+        }
+        questionsToUse = filtered;
+      }
+      
       const usedQuestions = getUsedQuestions(sheet);
-      const availableQuestions = filtered.filter(row => !usedQuestions.includes(row[2]));
+      const availableQuestions = questionsToUse.filter(row => !usedQuestions.includes(row[2]));
       
       if (availableQuestions.length > 0) {
         const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
@@ -386,7 +515,11 @@ function showNextQuestion(sheet, spreadsheet) {
         }
       } else {
         // No more unique questions available, end quiz early
-        questionCell.setValue("Quiz Complete! No more unique questions available for this category.");
+        if (retryWrongChecked) {
+          questionCell.setValue("Quiz Complete! All wrong questions have been answered correctly.");
+        } else {
+          questionCell.setValue("Quiz Complete! No more unique questions available for this category.");
+        }
         answerCell.setValue(''); // Clear answer when quiz completes
         // Disable checkboxes and stop quiz
         toggleRightWrongCheckboxes(sheet, false);
