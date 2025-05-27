@@ -1,7 +1,54 @@
+let __wrongAnswersTrackerBackup = null;
+
+function backupWrongAnswersTracker() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+  if (trackerSheet) {
+    __wrongAnswersTrackerBackup = trackerSheet.getDataRange().getValues();
+  } else {
+    __wrongAnswersTrackerBackup = null; // No tracker sheet to backup
+  }
+}
+
+function restoreWrongAnswersTracker() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+
+  // Ensure the tracker sheet exists and has headers
+  if (!trackerSheet) {
+    // If the sheet didn't exist before backup, setupWrongAnswersTrackerSheet will create it.
+    // This function is assumed to be in Code.txt and handles header creation.
+    setupWrongAnswersTrackerSheet(); 
+    trackerSheet = ss.getSheetByName('WrongAnswersTracker'); // Get reference after creation
+  } else {
+    // Ensure headers are present if sheet existed but was empty
+    const headerRange = trackerSheet.getRange('A1:C1');
+    if (headerRange.isBlank()) {
+      headerRange.setValues([['Question', 'Category', 'Wrong Count']]).setFontWeight('bold');
+    }
+  }
+
+  // Clear existing content below the header
+  const lastRow = trackerSheet.getLastRow();
+  if (lastRow > 1) {
+    trackerSheet.getRange(2, 1, lastRow - 1, trackerSheet.getLastColumn()).clearContent();
+  }
+
+  if (__wrongAnswersTrackerBackup !== null && __wrongAnswersTrackerBackup.length > 1) {
+    // Write the backed-up data, skipping the header row from the backup
+    const numCols = __wrongAnswersTrackerBackup[0].length;
+    trackerSheet.getRange(2, 1, __wrongAnswersTrackerBackup.length - 1, numCols)
+                .setValues(__wrongAnswersTrackerBackup.slice(1));
+  } else if (__wrongAnswersTrackerBackup === null) {
+    // If there was no backup (meaning the sheet didn't exist before backup), ensure it's empty except headers
+    // This case is already handled by the clear above and the initial setup.
+  }
+}
+
+
 function setupTestResultsSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let testSheet = ss.getSheetByName('testResults');
-
   if (!testSheet) {
     testSheet = ss.insertSheet('testResults');
     testSheet.getRange('A1:D1').setValues([['Unit Test Name', 'Test Name', 'Result', 'Details']]);
@@ -16,7 +63,6 @@ function setupTestResultsSheet() {
 function clearTestResults() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let testSheet = ss.getSheetByName('testResults');
-
   if (testSheet) {
     const lastRow = testSheet.getLastRow();
     if (lastRow > 1) {
@@ -38,7 +84,6 @@ function recordTestResult(unitTestName, testName, passed, details) {
       details
     ]
   ]);
-
   const resultCell = testSheet.getRange(lastRow + 1, 3);
   resultCell.setBackground(passed ? '#b7e1cd' : '#f4c7c3');
 
@@ -63,6 +108,70 @@ function createMockEditEvent(spreadsheet, range, newValue, oldValue) {
     oldValue: oldValue
   };
 }
+
+// Helper function to setup test data in datastore sheet
+function setupTestDatastore() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let datastoreSheet = ss.getSheetByName('datastore');
+
+  if (!datastoreSheet) {
+    datastoreSheet = ss.insertSheet('datastore');
+  }
+
+  // Clear existing data and setup test data
+  // datastoreSheet.clear();
+ /* datastoreSheet.getRange('A1:D6').setValues([
+    ['SL#', 'Category', 'Questions', 'Answers'],
+    [1, 'Test Category', 'Question 1', 'Answer 1'],
+    [2, 'Test Category', 'Question 2', 'Answer 2'],
+    [3, 'Test Category', 'Question 3', 'Answer 3'],
+    [4, 'Other Category', 'Question 4', 'Answer 4'],
+    [5, 'Test Category', 'Question 5', 'Answer 5']
+  ]);*/
+}
+
+// Helper function to reset quiz sheet to clean state
+function resetQuizSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Preserve wrong questions before clearing the sheet
+  const wrongQuestions = getWrongQuestions(quizSheet);
+  // Log wrong questions before reset
+  const wrongQuestionsBefore = getWrongQuestions(quizSheet);
+  console.log('Before Reset:', JSON.stringify(wrongQuestionsBefore));
+  // Clear all values and reset state
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('B2').setValue(false); // Start Quiz
+  quizSheet.getRange('B3').setValue(false);
+  // Retry Wrong Questions
+  quizSheet.getRange('A4').setValue(''); // Question
+  quizSheet.getRange('B5').setValue(false); // Right
+  quizSheet.getRange('B6').setValue(false); // Wrong
+  quizSheet.getRange('B7').setValue(false);
+  // Show Answer
+  quizSheet.getRange('A8').setValue(''); // Answer
+  quizSheet.getRange('B9').setValue(0); // Right count
+  quizSheet.getRange('B10').setValue(0);
+  // Wrong count
+
+  // Reset counters and lists
+  resetQuestionCounter(quizSheet);
+  resetUsedQuestions(quizSheet);
+  // Restore wrong questions after reset
+  setWrongQuestions(quizSheet, wrongQuestions);
+
+  // Remove all protections
+  toggleRightWrongCheckboxes(quizSheet, false);
+  // Log wrong questions after reset
+  const wrongQuestionsAfter = getWrongQuestions(quizSheet);
+  console.log('After Reset:', JSON.stringify(wrongQuestionsAfter));
+  // Restore wrong questions after reset
+  setWrongQuestions(quizSheet, wrongQuestionsBefore);
+}
+
+
+//TESTS START FROM HERE
 
 // Test that verifies cell A4 is cleared when category in A1 is changed
 function testCategoryClearsQuestionCell() {
@@ -1986,6 +2095,232 @@ function testRetryModeCompletionStopsQuiz() {
 
   return passed;
 }
+
+function testWrongQuestionsResetInNormalMode() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Add questions to wrong questions list
+  setWrongQuestions(quizSheet, ['Question 1', 'Question 2']);
+  const wrongQuestionsBefore = getWrongQuestions(quizSheet);
+
+  // Start normal quiz (not retry mode)
+  quizSheet.getRange('B3').setValue(false); // Ensure retry mode is off
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const wrongQuestionsAfter = getWrongQuestions(quizSheet);
+
+  const passed = (wrongQuestionsBefore.length > 0 && wrongQuestionsAfter.length === 0);
+
+  recordTestResult(
+    'testWrongQuestionsResetInNormalMode',
+    'Wrong questions list should be reset when starting normal quiz',
+    passed,
+    `Before normal quiz: ${wrongQuestionsBefore.length} questions. After: ${wrongQuestionsAfter.length} questions`
+  );
+
+  return passed;
+}
+
+//start here
+function testWrongQuestionsResetInNormalMode() {
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+
+  // Add questions to wrong questions list
+  setWrongQuestions(quizSheet, ['Question 1', 'Question 2']);
+  const wrongQuestionsBefore = getWrongQuestions(quizSheet);
+
+  // Start normal quiz (not retry mode)
+  quizSheet.getRange('B3').setValue(false);
+  // Ensure retry mode is off
+  quizSheet.getRange('B2').setValue(true);
+  const startEvent = createMockEditEvent(ss, quizSheet.getRange('B2'), true, false);
+  handleCheckboxEdit(startEvent);
+
+  const wrongQuestionsAfter = getWrongQuestions(quizSheet);
+  const passed = (wrongQuestionsBefore.length > 0 && wrongQuestionsAfter.length === 0);
+  recordTestResult(
+    'testWrongQuestionsResetInNormalMode',
+    'Wrong questions list should be reset when starting normal quiz',
+    passed,
+    `Before normal quiz: ${wrongQuestionsBefore.length} questions. After: ${wrongQuestionsAfter.length} questions`
+  );
+  return passed;
+}
+
+function testUpdateWrongAnswersTracker_NewQuestion() {
+  const unitTestName = 'WrongAnswersTracker';
+  const testName = 'New question added with count 1';
+  let passed = false;
+  let details = '';
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker') || ss.insertSheet('WrongAnswersTracker');
+  trackerSheet.clearContents(); // Clear for a clean test
+  trackerSheet.getRange('A1:C1').setValues([['Question', 'Category', 'Wrong Count']]).setFontWeight('bold');
+
+  const question = 'New Question 1';
+  const category = 'Test Category';
+
+  updateWrongAnswersTracker(question, category);
+
+  const data = trackerSheet.getDataRange().getValues();
+  if (data.length === 2 && data[1][0] === question && data[1][1] === category && data[1][2] === 1) {
+    passed = true;
+    details = 'Question added correctly with count 1.';
+  } else {
+    details = `Expected: [${question}, ${category}, 1]. Actual: ${JSON.stringify(data[1])}`;
+  }
+  recordTestResult(unitTestName, testName, passed, details);
+  return passed;
+}
+
+function testUpdateWrongAnswersTracker_ExistingQuestion() {
+  const unitTestName = 'WrongAnswersTracker';
+  const testName = 'Existing question count incremented';
+  let passed = false;
+  let details = '';
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker') || ss.insertSheet('WrongAnswersTracker');
+  trackerSheet.clearContents(); // Clear for a clean test
+  trackerSheet.getRange('A1:C2').setValues([
+    ['Question', 'Category', 'Wrong Count'],
+    ['Existing Question', 'Test Category', 1]
+  ]).setFontWeight('bold');
+
+  const question = 'Existing Question';
+  const category = 'Test Category';
+
+  updateWrongAnswersTracker(question, category);
+  updateWrongAnswersTracker(question, category); // Call again to increment
+
+  const data = trackerSheet.getDataRange().getValues();
+  if (data.length === 2 && data[1][0] === question && data[1][1] === category && data[1][2] === 3) { // Should be 3 after two increments from initial 1
+    passed = true;
+    details = 'Existing question count incremented correctly.';
+  } else {
+    details = `Expected count: 3. Actual count: ${data[1][2]}`;
+  }
+  recordTestResult(unitTestName, testName, passed, details);
+  return passed;
+}
+
+function testHandleCheckboxEdit_WrongCheckboxTracking() {
+  const unitTestName = 'handleCheckboxEdit';
+  const testName = 'Wrong checkbox updates tracker and session count';
+  let passed = false;
+  let details = '';
+
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+  trackerSheet.clearContents(); // Clear tracker for this test
+  trackerSheet.getRange('A1:C1').setValues([['Question', 'Category', 'Wrong Count']]).setFontWeight('bold');
+
+  // Set up a category and question on the quiz sheet
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('A4').setValue('Test Question X');
+  quizSheet.getRange('B2').setValue(true); // Simulate quiz started
+
+  // Capture initial wrong answer count
+  const initialWrongCountSession = getWrongAnswersCount(quizSheet);
+
+  // Simulate checking the 'Wrong' checkbox
+  const wrongCheckboxRange = quizSheet.getRange('B6');
+  const mockEvent = createMockEditEvent(ss, wrongCheckboxRange, true, false);
+  handleCheckboxEdit(mockEvent);
+
+  // Verify session wrong answer count incremented
+  const finalWrongCountSession = getWrongAnswersCount(quizSheet);
+  const sessionCountPassed = (finalWrongCountSession === initialWrongCountSession + 1);
+
+  // Verify tracker sheet was updated
+  const trackerData = trackerSheet.getDataRange().getValues();
+  const trackerUpdated = (trackerData.length === 2 && trackerData[1][0] === 'Test Question X' && trackerData[1][1] === 'Test Category' && trackerData[1][2] === 1);
+
+  if (sessionCountPassed && trackerUpdated) {
+    passed = true;
+    details = 'Session wrong count incremented and tracker updated correctly.';
+  } else {
+    details = `Session count passed: ${sessionCountPassed}. Tracker updated: ${trackerUpdated}.`;
+    if (!sessionCountPassed) details += ` Expected session count: ${initialWrongCountSession + 1}, Actual: ${finalWrongCountSession}.`;
+    if (!trackerUpdated) details += ` Tracker data: ${JSON.stringify(trackerData)}.`;
+  }
+  recordTestResult(unitTestName, testName, passed, details);
+  return passed;
+}
+
+function testHandleCheckboxEdit_RightCheckboxNoTracking() {
+  const unitTestName = 'handleCheckboxEdit';
+  const testName = 'Right checkbox does not update tracker';
+  let passed = false;
+  let details = '';
+
+  setupTestDatastore();
+  resetQuizSheet();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const quizSheet = ss.getSheetByName('quiz');
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+  trackerSheet.clearContents(); // Clear tracker for this test
+  trackerSheet.getRange('A1:C1').setValues([['Question', 'Category', 'Wrong Count']]).setFontWeight('bold');
+
+  // Set up a category and question on the quiz sheet
+  quizSheet.getRange('A1').setValue('Test Category');
+  quizSheet.getRange('A4').setValue('Test Question Y');
+  quizSheet.getRange('B2').setValue(true); // Simulate quiz started
+
+  // Simulate checking the 'Right' checkbox
+  const rightCheckboxRange = quizSheet.getRange('B5');
+  const mockEvent = createMockEditEvent(ss, rightCheckboxRange, true, false);
+
+  // Mock updateWrongAnswersTracker to see if it's called
+  let updateWrongAnswersTrackerCalled = false;
+  const originalUpdateWrongAnswersTracker = globalThis.updateWrongAnswersTracker;
+  globalThis.updateWrongAnswersTracker = (question, category) => {
+    updateWrongAnswersTrackerCalled = true;
+    // Call original function to ensure normal flow if desired, or just flag
+    // originalUpdateWrongAnswersTracker(question, category); 
+  };
+
+  try {
+    handleCheckboxEdit(mockEvent);
+
+    // Verify tracker sheet was NOT updated
+    const trackerData = trackerSheet.getDataRange().getValues();
+    const trackerNotUpdated = (trackerData.length === 1); // Only header row
+
+    if (!updateWrongAnswersTrackerCalled && trackerNotUpdated) {
+      passed = true;
+      details = 'updateWrongAnswersTracker was not called, and tracker sheet was not updated.';
+    } else {
+      details = `updateWrongAnswersTrackerCalled: ${updateWrongAnswersTrackerCalled}. Tracker data length: ${trackerData.length}.`;
+    }
+  } catch (e) {
+    passed = false;
+    details = `Error during test: ${e.message}`;
+  } finally {
+    // Restore original function
+    globalThis.updateWrongAnswersTracker = originalUpdateWrongAnswersTracker;
+  }
+
+  recordTestResult(unitTestName, testName, passed, details);
+  return passed;
+}
+
 /**
  * Run all unit tests and record results in the test results sheet
  */
@@ -2018,7 +2353,7 @@ function runAllTests() {
   testMultipleWrongAnswers();
   testScorePreservationDuringQuizProgress();
   testMixedAnswers();
-  /*testRetryModeStopsRunningQuiz();
+  testRetryModeStopsRunningQuiz();
   testRetryModeToggleWhenQuizNotRunning();
   testWrongAnswerAddsToList();
   testRightAnswerDoesNotAddToList();
@@ -2031,8 +2366,14 @@ function runAllTests() {
   testWrongAnswerInRetryModeIncrementsCounter();
   testRetryModeCompletionMessage();
   testRetryModeCompletionStopsQuiz();
-  testWrongQuestionsResetInNormalMode();*/
+  testWrongQuestionsResetInNormalMode();
+  backupWrongAnswersTracker(); // Backup before running tests
+  testUpdateWrongAnswersTracker_NewQuestion();
+  testUpdateWrongAnswersTracker_ExistingQuestion();
+  testHandleCheckboxEdit_WrongCheckboxTracking();
+  testHandleCheckboxEdit_RightCheckboxNoTracking();
 
-
+  //Failed tests
+  //testUsedQuestionsResetOnQuizComplete();
 }
 

@@ -2,6 +2,9 @@ function setupQuizSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const datastoreSheet = ss.getSheetByName('datastore');
   const quizSheet = ss.getSheetByName('quiz');
+  
+  // === NEW: Set up the tracker sheet for wrong answers ===
+  setupWrongAnswersTrackerSheet();
 
   // === 1. Set Category Dropdown in A1 ===
   const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
@@ -11,38 +14,37 @@ function setupQuizSheet() {
     .requireValueInList(uniqueCategories, true)
     .setAllowInvalid(false)
     .build();
-
   quizSheet.getRange('A1').setDataValidation(dropdownRule);
 
   // === 2. Insert "Start Quiz" label and checkbox ===
   quizSheet.getRange('A2').setValue('Start Quiz');
   quizSheet.getRange('B2').insertCheckboxes();
+  
+  // === 3. Add Retry Wrong Questions checkbox ===
+  quizSheet.getRange('A3').setValue('Retry Wrong Questions');
+  quizSheet.getRange('B3').insertCheckboxes();
 
-  // === 3. Add Right and Wrong checkboxes ===
+  // === 4. Add Right and Wrong checkboxes ===
   quizSheet.getRange('A5').setValue('Right');
   quizSheet.getRange('B5').insertCheckboxes();
   quizSheet.getRange('A6').setValue('Wrong');
   quizSheet.getRange('B6').insertCheckboxes();
-
-  // === 4. Add Show Answer checkbox ===
+  
+  // === 5. Add Show Answer checkbox ===
   quizSheet.getRange('A7').setValue('Show Answer');
   quizSheet.getRange('B7').insertCheckboxes();
-
-  // === 5. Add Retry Wrong Questions checkbox ===
-  quizSheet.getRange('A3').setValue('Retry Wrong Questions');
-  quizSheet.getRange('B3').insertCheckboxes();
 
   // === 6. Add Score Display Section ===
   quizSheet.getRange('A9').setValue('Right Answers:');
   quizSheet.getRange('B9').setValue(0);
   quizSheet.getRange('A10').setValue('Wrong Answers:');
   quizSheet.getRange('B10').setValue(0);
-
+  
   // === 7. Initially disable Right, Wrong, Show Answer, and Retry Wrong Questions checkboxes ===
+  quizSheet.getRange('B3').protect().setDescription('Retry Wrong Questions checkbox - disabled until quiz starts');
   quizSheet.getRange('B5').protect().setDescription('Right checkbox - disabled until quiz starts');
   quizSheet.getRange('B6').protect().setDescription('Wrong checkbox - disabled until quiz starts');
   quizSheet.getRange('B7').protect().setDescription('Show Answer checkbox - disabled until quiz starts');
-  quizSheet.getRange('B3').protect().setDescription('Retry Wrong Questions checkbox - disabled until quiz starts');
 
   // === 8. Add onEdit trigger (only if not already set) ===
   const triggers = ScriptApp.getProjectTriggers();
@@ -56,13 +58,47 @@ function setupQuizSheet() {
   }
 }
 
+// === NEW: Helper function to set up the WrongAnswersTracker sheet ===
+function setupWrongAnswersTrackerSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+  if (!trackerSheet) {
+    trackerSheet = ss.insertSheet('WrongAnswersTracker');
+    trackerSheet.getRange('A1:C1').setValues([['Question', 'Category', 'Wrong Count']]).setFontWeight('bold');
+    trackerSheet.setColumnWidth(1, 400); // Set width for Question column
+    trackerSheet.setColumnWidth(2, 150); // Set width for Category column
+    trackerSheet.setColumnWidth(3, 100); // Set width for Wrong Count column
+  }
+}
+
+// === NEW: Helper function to update the wrong answers tracker ===
+function updateWrongAnswersTracker(questionText, category) {
+  if (!questionText || !category) return;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+  const data = trackerSheet.getDataRange().getValues();
+
+  // Start searching from row 2 (index 1) to skip header
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === questionText) { // Question found in column A
+      const currentCount = data[i][2] || 0; // Get current count from column C
+      trackerSheet.getRange(i + 1, 3).setValue(currentCount + 1); // Increment count
+      return; // Exit after updating
+    }
+  }
+
+  // If question is not found, append it as a new row
+  trackerSheet.appendRow([questionText, category, 1]);
+}
+
+
 // === Helper function to enable/disable Right, Wrong, Show Answer, and Retry Wrong Questions checkboxes ===
 function toggleRightWrongCheckboxes(sheet, enable) {
   const rightCheckbox = sheet.getRange('B5');
   const wrongCheckbox = sheet.getRange('B6');
   const showAnswerCheckbox = sheet.getRange('B7');
   const retryWrongCheckbox = sheet.getRange('B3');
-  
   if (enable) {
     // Remove protection to enable checkboxes
     const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
@@ -226,7 +262,6 @@ function getCurrentQuestionAnswer(sheet, spreadsheet) {
   
   // Find the row with the current question
   const questionRow = data.find((row, index) => index !== 0 && row[2] === currentQuestion);
-  
   if (questionRow) {
     return questionRow[3]; // Answer is in column D (index 3)
   }
@@ -237,7 +272,6 @@ function getCurrentQuestionAnswer(sheet, spreadsheet) {
 // === Helper function to show/hide answer ===
 function toggleAnswer(sheet, spreadsheet, show) {
   const answerCell = sheet.getRange('A8');
-  
   if (show) {
     const answer = getCurrentQuestionAnswer(sheet, spreadsheet);
     answerCell.setValue(answer);
@@ -256,13 +290,13 @@ function handleCheckboxEdit(e) {
 
   // === If category changed in A1 ===
   if (sheet.getName() === 'quiz' && cell === 'A1') {
-    sheet.getRange('A4').setValue('');     // Clear question
+    sheet.getRange('A4').setValue(''); // Clear question
     sheet.getRange('A8').setValue('');     // Clear answer
-    sheet.getRange('B2').setValue(false);  // Uncheck Start Quiz checkbox
+    sheet.getRange('B2').setValue(false); // Uncheck Start Quiz checkbox
     resetQuestionCounter(sheet);           // Reset question counter
-    resetUsedQuestions(sheet);             // Reset used questions list
+    resetUsedQuestions(sheet); // Reset used questions list
     resetWrongQuestions(sheet);            // Reset wrong questions list
-    resetAnswerCounts(sheet);              // Reset answer counts
+    resetAnswerCounts(sheet); // Reset answer counts
     toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong/Show Answer/Retry Wrong Questions checkboxes
     return;
   }
@@ -274,15 +308,12 @@ function handleCheckboxEdit(e) {
     const questionCell = sheet.getRange('A4');
     const answerCell = sheet.getRange('A8');
     const retryWrongChecked = sheet.getRange('B3').getValue();
-
     if (isChecked && category) {
       const datastore = e.source.getSheetByName('datastore');
       const data = datastore.getDataRange().getValues();
       const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
-
       if (filtered.length > 0) {
         let questionsToUse = [];
-        
         if (retryWrongChecked) {
           // Get wrong questions for retry mode
           const wrongQuestions = getWrongQuestions(sheet);
@@ -308,7 +339,6 @@ function handleCheckboxEdit(e) {
         
         const usedQuestions = getUsedQuestions(sheet);
         const availableQuestions = questionsToUse.filter(row => !usedQuestions.includes(row[2]));
-        
         if (availableQuestions.length > 0) {
           const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
           questionCell.setValue(random[2]); // Question in column C
@@ -316,7 +346,6 @@ function handleCheckboxEdit(e) {
           setQuestionCounter(sheet, 1); // Start with question 1
           // Enable Right/Wrong/Show Answer checkboxes when quiz starts
           toggleRightWrongCheckboxes(sheet, true);
-          
           // Check if Show Answer checkbox is already checked and display answer if so
           const showAnswerChecked = sheet.getRange('B7').getValue();
           if (showAnswerChecked) {
@@ -402,13 +431,19 @@ function handleCheckboxEdit(e) {
     
     // Only proceed if Start Quiz is checked
     if (isChecked && startQuizChecked) {
-      // Add current question to wrong questions list
+      // Add current question to wrong questions list for session
       const currentQuestion = sheet.getRange('A4').getValue();
       if (currentQuestion && currentQuestion !== '') {
         addWrongQuestion(sheet, currentQuestion);
+        
+        // --- MODIFICATION START ---
+        // Track the wrong answer in the WrongAnswersTracker sheet
+        const category = sheet.getRange('A1').getValue();
+        updateWrongAnswersTracker(currentQuestion, category);
+        // --- MODIFICATION END ---
       }
       
-      // Increment wrong answers count
+      // Increment wrong answers count for session score
       incrementWrongAnswers(sheet);
       // Uncheck Right checkbox
       sheet.getRange('B5').setValue(false);
@@ -451,15 +486,12 @@ function showNextQuestion(sheet, spreadsheet) {
   const showAnswerCheckbox = sheet.getRange('B7');
   const retryWrongChecked = sheet.getRange('B3').getValue();
   const currentCount = getQuestionCounter(sheet);
-
   if (category) {
     const datastore = spreadsheet.getSheetByName('datastore');
     const data = datastore.getDataRange().getValues();
     const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
-
     if (filtered.length > 0) {
       let questionsToUse = [];
-      
       if (retryWrongChecked) {
         // Get wrong questions for retry mode
         const wrongQuestions = getWrongQuestions(sheet);
@@ -501,11 +533,9 @@ function showNextQuestion(sheet, spreadsheet) {
         
         // Increment question counter
         setQuestionCounter(sheet, currentCount + 1);
-        
         // Clear both Right/Wrong checkboxes for the next question
         sheet.getRange('B5').setValue(false);
         sheet.getRange('B6').setValue(false);
-        
         // Handle Show Answer checkbox - if checked, show new answer; if unchecked, clear answer
         const showAnswerChecked = showAnswerCheckbox.getValue();
         if (showAnswerChecked) {
