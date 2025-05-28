@@ -2,10 +2,8 @@ function setupQuizSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const datastoreSheet = ss.getSheetByName('datastore');
   const quizSheet = ss.getSheetByName('quiz');
-  
   // === NEW: Set up the tracker sheet for wrong answers ===
   setupWrongAnswersTrackerSheet();
-
   // === 1. Set Category Dropdown in A1 ===
   const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
   const uniqueCategories = [...new Set(data.flat().filter(Boolean))];
@@ -19,27 +17,22 @@ function setupQuizSheet() {
   // === 2. Insert "Start Quiz" label and checkbox ===
   quizSheet.getRange('A2').setValue('Start Quiz');
   quizSheet.getRange('B2').insertCheckboxes();
-  
   // === 3. Add Retry Wrong Questions checkbox ===
   quizSheet.getRange('A3').setValue('Retry Wrong Questions');
   quizSheet.getRange('B3').insertCheckboxes();
-
   // === 4. Add Right and Wrong checkboxes ===
   quizSheet.getRange('A5').setValue('Right');
   quizSheet.getRange('B5').insertCheckboxes();
   quizSheet.getRange('A6').setValue('Wrong');
   quizSheet.getRange('B6').insertCheckboxes();
-  
   // === 5. Add Show Answer checkbox ===
   quizSheet.getRange('A7').setValue('Show Answer');
   quizSheet.getRange('B7').insertCheckboxes();
-
   // === 6. Add Score Display Section ===
   quizSheet.getRange('A9').setValue('Right Answers:');
   quizSheet.getRange('B9').setValue(0);
   quizSheet.getRange('A10').setValue('Wrong Answers:');
   quizSheet.getRange('B10').setValue(0);
-  
   // === 7. Initially disable Right, Wrong, Show Answer, and Retry Wrong Questions checkboxes ===
   quizSheet.getRange('B3').protect().setDescription('Retry Wrong Questions checkbox - disabled until quiz starts');
   quizSheet.getRange('B5').protect().setDescription('Right checkbox - disabled until quiz starts');
@@ -65,31 +58,54 @@ function setupWrongAnswersTrackerSheet() {
   if (!trackerSheet) {
     trackerSheet = ss.insertSheet('WrongAnswersTracker');
     trackerSheet.getRange('A1:C1').setValues([['Question', 'Category', 'Wrong Count']]).setFontWeight('bold');
-    trackerSheet.setColumnWidth(1, 400); // Set width for Question column
-    trackerSheet.setColumnWidth(2, 150); // Set width for Category column
-    trackerSheet.setColumnWidth(3, 100); // Set width for Wrong Count column
+    trackerSheet.setColumnWidth(1, 400);
+    // Set width for Question column
+    trackerSheet.setColumnWidth(2, 150);
+    // Set width for Category column
+    trackerSheet.setColumnWidth(3, 100);
+    // Set width for Wrong Count column
   }
 }
 
 // === NEW: Helper function to update the wrong answers tracker ===
 function updateWrongAnswersTracker(questionText, category) {
   if (!questionText || !category) return;
-
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const trackerSheet = ss.getSheetByName('WrongAnswersTracker');
   const data = trackerSheet.getDataRange().getValues();
-
   // Start searching from row 2 (index 1) to skip header
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === questionText) { // Question found in column A
       const currentCount = data[i][2] || 0; // Get current count from column C
-      trackerSheet.getRange(i + 1, 3).setValue(currentCount + 1); // Increment count
+      trackerSheet.getRange(i + 1, 3).setValue(currentCount + 1);
+      // Increment count
       return; // Exit after updating
     }
   }
 
   // If question is not found, append it as a new row
   trackerSheet.appendRow([questionText, category, 1]);
+}
+
+// === NEW: Helper function to decrement the wrong answers tracker ===
+function decrementWrongAnswersTracker(questionText) {
+  if (!questionText) return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+  if (!trackerSheet) return;
+
+  const data = trackerSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === questionText) {
+      const currentCount = data[i][2] || 0;
+      if (currentCount > 1) {
+        trackerSheet.getRange(i + 1, 3).setValue(currentCount - 1);
+      } else if (currentCount === 1) {
+        trackerSheet.deleteRow(i + 1); // Delete the row if count becomes 0
+      }
+      return;
+    }
+  }
 }
 
 
@@ -103,8 +119,8 @@ function toggleRightWrongCheckboxes(sheet, enable) {
     // Remove protection to enable checkboxes
     const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
     protections.forEach(protection => {
-      const range = protection.getRange();
-      if (range.getA1Notation() === 'B5' || range.getA1Notation() === 'B6' || range.getA1Notation() === 'B7' || range.getA1Notation() === 'B3') {
+      const range = protection.getA1Notation();
+      if (range === 'B5' || range === 'B6' || range === 'B7' || range === 'B3') {
         protection.remove();
       }
     });
@@ -290,13 +306,17 @@ function handleCheckboxEdit(e) {
 
   // === If category changed in A1 ===
   if (sheet.getName() === 'quiz' && cell === 'A1') {
-    sheet.getRange('A4').setValue(''); // Clear question
+    sheet.getRange('A4').setValue('');
+    // Clear question
     sheet.getRange('A8').setValue('');     // Clear answer
-    sheet.getRange('B2').setValue(false); // Uncheck Start Quiz checkbox
+    sheet.getRange('B2').setValue(false);
+    // Uncheck Start Quiz checkbox
     resetQuestionCounter(sheet);           // Reset question counter
-    resetUsedQuestions(sheet); // Reset used questions list
+    resetUsedQuestions(sheet);
+    // Reset used questions list
     resetWrongQuestions(sheet);            // Reset wrong questions list
-    resetAnswerCounts(sheet); // Reset answer counts
+    resetAnswerCounts(sheet);
+    // Reset answer counts
     toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong/Show Answer/Retry Wrong Questions checkboxes
     return;
   }
@@ -342,8 +362,10 @@ function handleCheckboxEdit(e) {
         if (availableQuestions.length > 0) {
           const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
           questionCell.setValue(random[2]); // Question in column C
-          addUsedQuestion(sheet, random[2]); // Track this question as used
-          setQuestionCounter(sheet, 1); // Start with question 1
+          addUsedQuestion(sheet, random[2]);
+          // Track this question as used
+          setQuestionCounter(sheet, 1);
+          // Start with question 1
           // Enable Right/Wrong/Show Answer checkboxes when quiz starts
           toggleRightWrongCheckboxes(sheet, true);
           // Check if Show Answer checkbox is already checked and display answer if so
@@ -369,10 +391,12 @@ function handleCheckboxEdit(e) {
       }
     } else {
       questionCell.setValue('');
-      answerCell.setValue(''); // Clear answer when quiz stops
+      answerCell.setValue('');
+      // Clear answer when quiz stops
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
-      resetAnswerCounts(sheet); // Reset answer counts when quiz stops
+      resetAnswerCounts(sheet);
+      // Reset answer counts when quiz stops
       // Disable Right/Wrong/Show Answer/Retry Wrong Questions checkboxes when quiz stops
       toggleRightWrongCheckboxes(sheet, false);
     }
@@ -385,9 +409,11 @@ function handleCheckboxEdit(e) {
     
     // If Start Quiz is running, stop it and clear the question
     if (startQuizChecked) {
-      sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
+      sheet.getRange('B2').setValue(false);
+      // Uncheck Start Quiz
       sheet.getRange('A4').setValue(''); // Clear question
-      sheet.getRange('A8').setValue(''); // Clear answer
+      sheet.getRange('A8').setValue('');
+      // Clear answer
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
       resetAnswerCounts(sheet);
@@ -403,10 +429,17 @@ function handleCheckboxEdit(e) {
     
     // Only proceed if Start Quiz is checked
     if (isChecked && startQuizChecked) {
+      const currentQuestion = sheet.getRange('A4').getValue();
+      // --- MODIFICATION START ---
+      // When a question is answered correctly, decrement its count in the tracker.
+      if (currentQuestion && currentQuestion !== '') {
+        decrementWrongAnswersTracker(currentQuestion);
+      }
+      // --- MODIFICATION END ---
+      
       // If in retry mode, remove current question from wrong questions list
       const retryWrongChecked = sheet.getRange('B3').getValue();
       if (retryWrongChecked) {
-        const currentQuestion = sheet.getRange('A4').getValue();
         if (currentQuestion && currentQuestion !== '') {
           removeFromWrongQuestions(sheet, currentQuestion);
         }
@@ -435,7 +468,6 @@ function handleCheckboxEdit(e) {
       const currentQuestion = sheet.getRange('A4').getValue();
       if (currentQuestion && currentQuestion !== '') {
         addWrongQuestion(sheet, currentQuestion);
-        
         // --- MODIFICATION START ---
         // Track the wrong answer in the WrongAnswersTracker sheet
         const category = sheet.getRange('A1').getValue();
@@ -510,14 +542,15 @@ function showNextQuestion(sheet, spreadsheet) {
         }
       } else {
         // Normal mode - check if we've reached 5 questions
-        if (currentCount >= 5) {
+        if (currentCount >= 5) { 
           questionCell.setValue("Quiz Complete! You have answered 5 questions.");
           answerCell.setValue(''); // Clear answer when quiz completes
           // Disable checkboxes and stop quiz
           toggleRightWrongCheckboxes(sheet, false);
           sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
           resetQuestionCounter(sheet);
-          resetUsedQuestions(sheet); // Reset used questions when quiz completes
+          resetUsedQuestions(sheet);
+          // Reset used questions when quiz completes
           return;
         }
         questionsToUse = filtered;
@@ -529,14 +562,16 @@ function showNextQuestion(sheet, spreadsheet) {
       if (availableQuestions.length > 0) {
         const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
         questionCell.setValue(random[2]); // Question in column C
-        addUsedQuestion(sheet, random[2]); // Track this question as used
+        addUsedQuestion(sheet, random[2]);
+        // Track this question as used
         
         // Increment question counter
         setQuestionCounter(sheet, currentCount + 1);
         // Clear both Right/Wrong checkboxes for the next question
         sheet.getRange('B5').setValue(false);
         sheet.getRange('B6').setValue(false);
-        // Handle Show Answer checkbox - if checked, show new answer; if unchecked, clear answer
+        // Handle Show Answer checkbox - if checked, show new answer;
+        // if unchecked, clear answer
         const showAnswerChecked = showAnswerCheckbox.getValue();
         if (showAnswerChecked) {
           toggleAnswer(sheet, spreadsheet, true);
@@ -559,7 +594,8 @@ function showNextQuestion(sheet, spreadsheet) {
       }
     } else {
       questionCell.setValue("No questions available for this category.");
-      answerCell.setValue(''); // Clear answer
+      answerCell.setValue('');
+      // Clear answer
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
     }

@@ -1,5 +1,3 @@
-
-
 // let __wrongAnswersTrackerBackup = null;
 
 // function backupWrongAnswersTracker() {
@@ -120,16 +118,6 @@
 //     datastoreSheet = ss.insertSheet('datastore');
 //   }
 
-//   // Clear existing data and setup test data
-//   // datastoreSheet.clear();
-//  /* datastoreSheet.getRange('A1:D6').setValues([
-//     ['SL#', 'Category', 'Questions', 'Answers'],
-//     [1, 'Test Category', 'Question 1', 'Answer 1'],
-//     [2, 'Test Category', 'Question 2', 'Answer 2'],
-//     [3, 'Test Category', 'Question 3', 'Answer 3'],
-//     [4, 'Other Category', 'Question 4', 'Answer 4'],
-//     [5, 'Test Category', 'Question 5', 'Answer 5']
-//   ]);*/
 // }
 
 // // Helper function to reset quiz sheet to clean state
