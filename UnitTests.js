@@ -2322,8 +2322,8 @@ function runAllTests() {
   
 
   
-  /*testQuestionCounterResetsOnCategoryChange();
-  testQuestionsNotRepeated();
+  testQuestionCounterResetsOnCategoryChange();
+  /*testQuestionsNotRepeated();
   testUsedQuestionsTracking();
   testUsedQuestionsResetOnCategoryChange();
   testUsedQuestionsResetOnQuizComplete();

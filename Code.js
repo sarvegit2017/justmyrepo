@@ -2,8 +2,14 @@ function setupQuizSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const datastoreSheet = ss.getSheetByName('datastore');
   const quizSheet = ss.getSheetByName('quiz');
+  
   // === NEW: Set up the tracker sheet for wrong answers ===
   setupWrongAnswersTrackerSheet();
+  // === NEW: Set up the tracker sheet for expert questions streak ===
+  setupExpertTrackerSheet();
+  // === NEW: Set up the expert questions sheet ===
+  setupExpertSheet();
+
   // === 1. Set Category Dropdown in A1 ===
   const data = datastoreSheet.getRange('B2:B' + datastoreSheet.getLastRow()).getValues();
   const uniqueCategories = [...new Set(data.flat().filter(Boolean))];
@@ -58,12 +64,35 @@ function setupWrongAnswersTrackerSheet() {
   if (!trackerSheet) {
     trackerSheet = ss.insertSheet('WrongAnswersTracker');
     trackerSheet.getRange('A1:C1').setValues([['Question', 'Category', 'Wrong Count']]).setFontWeight('bold');
-    trackerSheet.setColumnWidth(1, 400);
-    // Set width for Question column
-    trackerSheet.setColumnWidth(2, 150);
-    // Set width for Category column
-    trackerSheet.setColumnWidth(3, 100);
-    // Set width for Wrong Count column
+    trackerSheet.setColumnWidth(1, 400); // Set width for Question column
+    trackerSheet.setColumnWidth(2, 150); // Set width for Category column
+    trackerSheet.setColumnWidth(3, 100); // Set width for Wrong Count column
+  }
+}
+
+// === NEW: Helper function to set up the ExpertTracker sheet ===
+function setupExpertTrackerSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let trackerSheet = ss.getSheetByName('ExpertTracker');
+  if (!trackerSheet) {
+    trackerSheet = ss.insertSheet('ExpertTracker');
+    trackerSheet.getRange('A1:C1').setValues([['Question', 'Category', 'Correct Streak']]).setFontWeight('bold');
+    trackerSheet.setColumnWidth(1, 400); // Set width for Question column
+    trackerSheet.setColumnWidth(2, 150); // Set width for Category column
+    trackerSheet.setColumnWidth(3, 150); // Set width for Correct Streak column
+  }
+}
+
+// === NEW: Helper function to set up the Expert sheet ===
+function setupExpertSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let expertSheet = ss.getSheetByName('expert');
+  if (!expertSheet) {
+    expertSheet = ss.insertSheet('expert');
+    expertSheet.getRange('A1:D1').setValues([['SL#', 'Category', 'Question', 'Answer']]).setFontWeight('bold');
+    expertSheet.setColumnWidth(2, 150); // Category
+    expertSheet.setColumnWidth(3, 400); // Question
+    expertSheet.setColumnWidth(4, 400); // Answer
   }
 }
 
@@ -77,8 +106,7 @@ function updateWrongAnswersTracker(questionText, category) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === questionText) { // Question found in column A
       const currentCount = data[i][2] || 0; // Get current count from column C
-      trackerSheet.getRange(i + 1, 3).setValue(currentCount + 1);
-      // Increment count
+      trackerSheet.getRange(i + 1, 3).setValue(currentCount + 1); // Increment count
       return; // Exit after updating
     }
   }
@@ -106,6 +134,106 @@ function decrementWrongAnswersTracker(questionText) {
       return;
     }
   }
+}
+
+// === NEW: Helper function to check if a question is in WrongAnswersTracker ===
+function isQuestionInWrongTracker(questionText) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('WrongAnswersTracker');
+  if (!trackerSheet) return false;
+  const data = trackerSheet.getDataRange().getValues();
+  // Check if questionText exists in the first column (index 0) of the tracker data
+  return data.slice(1).some(row => row[0] === questionText);
+}
+
+// === NEW: Helper function to update the ExpertTracker streak ===
+function updateExpertTrackerStreak(questionText, category) {
+  if (!questionText || !category) return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('ExpertTracker');
+  const data = trackerSheet.getDataRange().getValues();
+  // Start searching from row 2 (index 1) to skip header
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === questionText) { // Question found in column A
+      const currentStreak = data[i][2] || 0; // Get current streak from column C
+      trackerSheet.getRange(i + 1, 3).setValue(currentStreak + 1); // Increment streak
+      return; // Exit after updating
+    }
+  }
+  // If question is not found, append it as a new row with streak 1
+  trackerSheet.appendRow([questionText, category, 1]);
+}
+
+// === NEW: Helper function to reset the ExpertTracker streak ===
+function resetExpertTrackerStreak(questionText) {
+  if (!questionText) return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('ExpertTracker');
+  if (!trackerSheet) return;
+
+  const data = trackerSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === questionText) {
+      trackerSheet.getRange(i + 1, 3).setValue(0); // Reset streak to 0
+      return;
+    }
+  }
+}
+
+// === NEW: Helper function to remove a question from ExpertTracker ===
+function removeFromExpertTracker(questionText) {
+  if (!questionText) return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const trackerSheet = ss.getSheetByName('ExpertTracker');
+  if (!trackerSheet) return;
+
+  const data = trackerSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === questionText) {
+      trackerSheet.deleteRow(i + 1); // Delete the row
+      return;
+    }
+  }
+}
+
+// === NEW: Helper function to get a list of questions in the 'expert' sheet ===
+function getExpertQuestionsList() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const expertSheet = ss.getSheetByName('expert');
+  if (!expertSheet || expertSheet.getLastRow() < 2) return [];
+  // Get questions from column C (index 2)
+  return expertSheet.getRange('C2:C' + expertSheet.getLastRow()).getValues().flat();
+}
+
+// === NEW: Helper function to move a question to the 'expert' sheet and remove from datastore ===
+function moveQuestionToExpertSheet(questionText, category, answer) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const expertSheet = ss.getSheetByName('expert');
+  const datastoreSheet = ss.getSheetByName('datastore');
+
+  // Append to expert sheet
+  const nextExpertRow = expertSheet.getLastRow() + 1;
+  expertSheet.getRange(nextExpertRow, 1).setValue(nextExpertRow - 1); // SL#
+  expertSheet.getRange(nextExpertRow, 2).setValue(category);
+  expertSheet.getRange(nextExpertRow, 3).setValue(questionText);
+  expertSheet.getRange(nextExpertRow, 4).setValue(answer);
+
+  // Remove from datastore sheet
+  const datastoreData = datastoreSheet.getDataRange().getValues();
+  let rowToDelete = -1;
+  for (let i = 1; i < datastoreData.length; i++) {
+    if (datastoreData[i][2] === questionText) { // Question is in column C (index 2)
+      rowToDelete = i + 1; // +1 because sheet rows are 1-indexed
+      break;
+    }
+  }
+  if (rowToDelete !== -1) {
+    datastoreSheet.deleteRow(rowToDelete);
+  }
+
+  // Remove from ExpertTracker and WrongAnswersTracker
+  removeFromExpertTracker(questionText);
+  decrementWrongAnswersTracker(questionText); // Use decrement to remove if count is 1
 }
 
 
@@ -306,17 +434,13 @@ function handleCheckboxEdit(e) {
 
   // === If category changed in A1 ===
   if (sheet.getName() === 'quiz' && cell === 'A1') {
-    sheet.getRange('A4').setValue('');
-    // Clear question
+    sheet.getRange('A4').setValue(''); // Clear question
     sheet.getRange('A8').setValue('');     // Clear answer
-    sheet.getRange('B2').setValue(false);
-    // Uncheck Start Quiz checkbox
+    sheet.getRange('B2').setValue(false); // Uncheck Start Quiz checkbox
     resetQuestionCounter(sheet);           // Reset question counter
-    resetUsedQuestions(sheet);
-    // Reset used questions list
+    resetUsedQuestions(sheet); // Reset used questions list
     resetWrongQuestions(sheet);            // Reset wrong questions list
-    resetAnswerCounts(sheet);
-    // Reset answer counts
+    resetAnswerCounts(sheet); // Reset answer counts
     toggleRightWrongCheckboxes(sheet, false); // Disable Right/Wrong/Show Answer/Retry Wrong Questions checkboxes
     return;
   }
@@ -331,7 +455,13 @@ function handleCheckboxEdit(e) {
     if (isChecked && category) {
       const datastore = e.source.getSheetByName('datastore');
       const data = datastore.getDataRange().getValues();
-      const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
+      
+      // Filter out questions already in the 'expert' sheet
+      const expertQuestions = getExpertQuestionsList();
+      const filtered = data.filter((row, index) => 
+        index !== 0 && row[1] === category && !expertQuestions.includes(row[2])
+      );
+
       if (filtered.length > 0) {
         let questionsToUse = [];
         if (retryWrongChecked) {
@@ -362,10 +492,8 @@ function handleCheckboxEdit(e) {
         if (availableQuestions.length > 0) {
           const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
           questionCell.setValue(random[2]); // Question in column C
-          addUsedQuestion(sheet, random[2]);
-          // Track this question as used
-          setQuestionCounter(sheet, 1);
-          // Start with question 1
+          addUsedQuestion(sheet, random[2]); // Track this question as used
+          setQuestionCounter(sheet, 1); // Start with question 1
           // Enable Right/Wrong/Show Answer checkboxes when quiz starts
           toggleRightWrongCheckboxes(sheet, true);
           // Check if Show Answer checkbox is already checked and display answer if so
@@ -384,19 +512,17 @@ function handleCheckboxEdit(e) {
           toggleRightWrongCheckboxes(sheet, false);
         }
       } else {
-        questionCell.setValue("No questions available for this category.");
+        questionCell.setValue("No questions available for this category or all questions are in Expert sheet.");
         resetQuestionCounter(sheet);
         resetUsedQuestions(sheet);
         toggleRightWrongCheckboxes(sheet, false);
       }
     } else {
       questionCell.setValue('');
-      answerCell.setValue('');
-      // Clear answer when quiz stops
+      answerCell.setValue(''); // Clear answer when quiz stops
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
-      resetAnswerCounts(sheet);
-      // Reset answer counts when quiz stops
+      resetAnswerCounts(sheet); // Reset answer counts when quiz stops
       // Disable Right/Wrong/Show Answer/Retry Wrong Questions checkboxes when quiz stops
       toggleRightWrongCheckboxes(sheet, false);
     }
@@ -409,11 +535,9 @@ function handleCheckboxEdit(e) {
     
     // If Start Quiz is running, stop it and clear the question
     if (startQuizChecked) {
-      sheet.getRange('B2').setValue(false);
-      // Uncheck Start Quiz
+      sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
       sheet.getRange('A4').setValue(''); // Clear question
-      sheet.getRange('A8').setValue('');
-      // Clear answer
+      sheet.getRange('A8').setValue(''); // Clear answer
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
       resetAnswerCounts(sheet);
@@ -430,12 +554,39 @@ function handleCheckboxEdit(e) {
     // Only proceed if Start Quiz is checked
     if (isChecked && startQuizChecked) {
       const currentQuestion = sheet.getRange('A4').getValue();
-      // --- MODIFICATION START ---
-      // When a question is answered correctly, decrement its count in the tracker.
+      const category = sheet.getRange('A1').getValue();
+
+      // --- MODIFICATION START for Expert Sheet ---
+      // When a question is answered correctly, decrement its count in the wrong tracker.
       if (currentQuestion && currentQuestion !== '') {
         decrementWrongAnswersTracker(currentQuestion);
       }
-      // --- MODIFICATION END ---
+      
+      // Check if the question is in the WrongAnswersTracker
+      const isInWrongTracker = isQuestionInWrongTracker(currentQuestion);
+      
+      if (!isInWrongTracker) {
+        // If not in WrongAnswersTracker, update the ExpertTracker streak
+        updateExpertTrackerStreak(currentQuestion, category);
+        const ss = e.source;
+        const expertTrackerSheet = ss.getSheetByName('ExpertTracker');
+        const expertTrackerData = expertTrackerSheet.getDataRange().getValues();
+        const currentQuestionRow = expertTrackerData.find(row => row[0] === currentQuestion);
+
+        if (currentQuestionRow && currentQuestionRow[2] >= 5) { // Streak reached 5
+          const answer = getCurrentQuestionAnswer(sheet, ss);
+          moveQuestionToExpertSheet(currentQuestion, category, answer);
+          // If the question just moved to expert, clear the current question and show next immediately
+          sheet.getRange('A4').setValue(''); 
+          sheet.getRange('A8').setValue('');
+          showNextQuestion(sheet, ss); // Show next question immediately
+          return; // Exit to prevent double-calling showNextQuestion
+        }
+      } else {
+        // If the question is in WrongAnswersTracker, reset its streak in ExpertTracker
+        resetExpertTrackerStreak(currentQuestion);
+      }
+      // --- MODIFICATION END for Expert Sheet ---
       
       // If in retry mode, remove current question from wrong questions list
       const retryWrongChecked = sheet.getRange('B3').getValue();
@@ -468,11 +619,11 @@ function handleCheckboxEdit(e) {
       const currentQuestion = sheet.getRange('A4').getValue();
       if (currentQuestion && currentQuestion !== '') {
         addWrongQuestion(sheet, currentQuestion);
-        // --- MODIFICATION START ---
         // Track the wrong answer in the WrongAnswersTracker sheet
         const category = sheet.getRange('A1').getValue();
         updateWrongAnswersTracker(currentQuestion, category);
-        // --- MODIFICATION END ---
+        // --- NEW: Reset ExpertTracker streak if answered wrong ---
+        resetExpertTrackerStreak(currentQuestion);
       }
       
       // Increment wrong answers count for session score
@@ -518,10 +669,17 @@ function showNextQuestion(sheet, spreadsheet) {
   const showAnswerCheckbox = sheet.getRange('B7');
   const retryWrongChecked = sheet.getRange('B3').getValue();
   const currentCount = getQuestionCounter(sheet);
+
   if (category) {
     const datastore = spreadsheet.getSheetByName('datastore');
     const data = datastore.getDataRange().getValues();
-    const filtered = data.filter((row, index) => index !== 0 && row[1] === category);
+    
+    // Filter out questions already in the 'expert' sheet
+    const expertQuestions = getExpertQuestionsList();
+    const filtered = data.filter((row, index) => 
+      index !== 0 && row[1] === category && !expertQuestions.includes(row[2])
+    );
+
     if (filtered.length > 0) {
       let questionsToUse = [];
       if (retryWrongChecked) {
@@ -549,8 +707,7 @@ function showNextQuestion(sheet, spreadsheet) {
           toggleRightWrongCheckboxes(sheet, false);
           sheet.getRange('B2').setValue(false); // Uncheck Start Quiz
           resetQuestionCounter(sheet);
-          resetUsedQuestions(sheet);
-          // Reset used questions when quiz completes
+          resetUsedQuestions(sheet); // Reset used questions when quiz completes
           return;
         }
         questionsToUse = filtered;
@@ -562,8 +719,7 @@ function showNextQuestion(sheet, spreadsheet) {
       if (availableQuestions.length > 0) {
         const random = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
         questionCell.setValue(random[2]); // Question in column C
-        addUsedQuestion(sheet, random[2]);
-        // Track this question as used
+        addUsedQuestion(sheet, random[2]); // Track this question as used
         
         // Increment question counter
         setQuestionCounter(sheet, currentCount + 1);
@@ -593,9 +749,8 @@ function showNextQuestion(sheet, spreadsheet) {
         resetUsedQuestions(sheet);
       }
     } else {
-      questionCell.setValue("No questions available for this category.");
-      answerCell.setValue('');
-      // Clear answer
+      questionCell.setValue("No questions available for this category or all questions are in Expert sheet.");
+      answerCell.setValue(''); // Clear answer
       resetQuestionCounter(sheet);
       resetUsedQuestions(sheet);
     }
